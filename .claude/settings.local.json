@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx wrangler:*)",
+      "WebFetch(domain:console.groq.com)",
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

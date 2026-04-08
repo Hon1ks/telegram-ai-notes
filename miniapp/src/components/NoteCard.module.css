@@ -1,0 +1,81 @@
+.wrapper {
+  position: relative;
+  transition: transform 150ms ease;
+}
+
+.swipeHint {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ef4444;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  z-index: 0;
+}
+
+.card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--bg-secondary);
+  transition: opacity var(--transition);
+}
+
+.card.done {
+  opacity: 0.5;
+}
+
+.checkbox {
+  font-size: 20px;
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.text {
+  display: block;
+  word-break: break-word;
+}
+
+.date {
+  display: block;
+  font-size: 12px;
+  color: var(--text-hint);
+  margin-top: 4px;
+}
+
+.editInput {
+  resize: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  width: 100%;
+}
+
+.deleteBtn {
+  font-size: 18px;
+  flex-shrink: 0;
+  opacity: 0.4;
+  padding: 2px 4px;
+  transition: opacity var(--transition);
+}
+
+.deleteBtn:hover {
+  opacity: 1;
+}

@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "notes-bot (Cloudflare Worker)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "notes-bot",
+      "port": 8787
+    },
+    {
+      "name": "miniapp (Vite React)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "miniapp",
+      "port": 5173
+    }
+  ]
+}
