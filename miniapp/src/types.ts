@@ -16,7 +16,13 @@ export interface Folder {
   user_id: number;
   name: string;
   sort_order: number;
+  note_count: number;
   created_at: string;
+}
+
+export interface FoldersResponse {
+  folders: Folder[];
+  uncategorized: number;
 }
 
 export type FilterType = 'all' | NoteType;

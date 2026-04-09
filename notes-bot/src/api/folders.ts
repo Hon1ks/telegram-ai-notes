@@ -7,16 +7,20 @@ import {
   updateFolder,
   deleteFolder,
   reorderFolders,
+  getUncategorizedCount,
 } from '../db/queries';
 
 export async function handleFoldersApi(env: Env, request: Request, path: string): Promise<Response> {
   const user = await authenticate(env, request);
   if (!user) return errorResponse('Unauthorized', 401);
 
-  // GET /api/folders — list folders
+  // GET /api/folders — list folders with note counts + uncategorized count
   if (request.method === 'GET' && path === '/api/folders') {
-    const folders = await getFoldersByUserId(env, user.id);
-    return jsonResponse(folders);
+    const [folders, uncategorized] = await Promise.all([
+      getFoldersByUserId(env, user.id),
+      getUncategorizedCount(env, user.id),
+    ]);
+    return jsonResponse({ folders, uncategorized });
   }
 
   // POST /api/folders — create folder

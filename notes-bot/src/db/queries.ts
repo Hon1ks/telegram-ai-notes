@@ -62,11 +62,26 @@ export async function createFolder(env: Env, userId: number, name: string): Prom
 
 export async function getFoldersByUserId(env: Env, userId: number): Promise<DbFolder[]> {
   const result = await env.NOTES_DB
-    .prepare('SELECT * FROM folders WHERE user_id = ? ORDER BY sort_order ASC, id ASC')
+    .prepare(`
+      SELECT f.*, COUNT(n.id) as note_count
+      FROM folders f
+      LEFT JOIN notes n ON n.folder_id = f.id
+      WHERE f.user_id = ?
+      GROUP BY f.id
+      ORDER BY f.sort_order ASC, f.id ASC
+    `)
     .bind(userId)
     .all<DbFolder>();
 
   return result.results;
+}
+
+export async function getUncategorizedCount(env: Env, userId: number): Promise<number> {
+  const row = await env.NOTES_DB
+    .prepare('SELECT COUNT(*) as cnt FROM notes WHERE user_id = ? AND folder_id IS NULL')
+    .bind(userId)
+    .first<{ cnt: number }>();
+  return row?.cnt ?? 0;
 }
 
 export async function getFolderById(env: Env, folderId: number, userId: number): Promise<DbFolder | null> {

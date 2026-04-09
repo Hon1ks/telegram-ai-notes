@@ -1,0 +1,97 @@
+.wrap {
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+/* ── Toggle row ── */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+}
+
+.toggleIcon { font-size: 16px; }
+
+.toggleLabel {
+  flex: 1;
+  font-size: 13px;
+  color: var(--hint);
+}
+
+.activeCount {
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 9px;
+  padding: 1px 7px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.chevron {
+  color: var(--hint);
+  transition: transform 220ms ease;
+  flex-shrink: 0;
+}
+.chevronOpen { transform: rotate(180deg); }
+
+/* ── Strip ── */
+.strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 14px 10px;
+  scrollbar-width: none;
+  animation: slideDown 180ms ease;
+}
+.strip::-webkit-scrollbar { display: none; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Folder chip ── */
+.chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--bg2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
+}
+
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: 0 2px 8px rgba(0,122,255,.25);
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,0,0,.08);
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 17px;
+}
+
+.chip.active .count {
+  background: rgba(255,255,255,.25);
+}

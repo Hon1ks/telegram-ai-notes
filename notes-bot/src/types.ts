@@ -74,6 +74,7 @@ export interface DbFolder {
   user_id: number;
   name: string;
   sort_order: number;
+  note_count: number;
   created_at: string;
 }
 

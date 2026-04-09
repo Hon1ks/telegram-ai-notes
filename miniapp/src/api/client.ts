@@ -1,4 +1,4 @@
-import type { Note, Folder, NoteType } from '../types';
+import type { Note, Folder, FoldersResponse, NoteType } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -67,8 +67,8 @@ export function deleteNote(id: number): Promise<{ success: boolean }> {
 
 // ─── Folders ─────────────────────────────────────────────────────────────────
 
-export function getFolders(): Promise<Folder[]> {
-  return request<Folder[]>('GET', '/api/folders');
+export function getFolders(): Promise<FoldersResponse> {
+  return request<FoldersResponse>('GET', '/api/folders');
 }
 
 export function createFolder(name: string): Promise<Folder> {

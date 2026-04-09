@@ -92,7 +92,21 @@
   overflow: hidden;
 }
 
-/* Tag active banner */
+/* Active folder banner */
+.folderBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 16px;
+  background: #eff6ff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  border-bottom: 1px solid #dbeafe;
+  flex-shrink: 0;
+}
+
+/* Active tag banner */
 .tagBanner {
   display: flex;
   align-items: center;
@@ -106,12 +120,13 @@
   flex-shrink: 0;
 }
 
-.tagBannerClose {
+.bannerClose {
   font-size: 14px;
-  color: #7c3aed;
-  opacity: 0.7;
+  opacity: 0.6;
   padding: 2px 6px;
+  transition: opacity var(--transition);
 }
+.bannerClose:hover { opacity: 1; }
 
 /* ── Folders view ── */
 .foldersView {
