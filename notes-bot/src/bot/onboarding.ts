@@ -3,11 +3,10 @@ import { sendMessage, editMessageText, answerCallbackQuery } from './telegram';
 import { onboardingChoiceKeyboard, onboardingDoneKeyboard } from './keyboard';
 import { getOrCreateUser, updateUserState, createFolder, getFoldersByUserId } from '../db/queries';
 
-const DEFAULT_FOLDERS = ['разработка', 'дом', 'покупки', 'личное'];
+const DEFAULT_FOLDERS = ['🚀 разработка', '🏠 дом', '🛒 покупки', '💡 идеи'];
 
-/**
- * Handles /start command — greets user and shows setup options.
- */
+// ─── /start ───────────────────────────────────────────────────────────────────
+
 export async function handleStart(env: Env, msg: TelegramMessage): Promise<void> {
   if (!msg.from) return;
 
@@ -15,20 +14,38 @@ export async function handleStart(env: Env, msg: TelegramMessage): Promise<void>
   await updateUserState(env, user.id, 'onboarding');
 
   const name = msg.from.first_name;
-  const text = `👋 Привет, <b>${name}</b>!\n\n` +
-    `Я <b>AI Notes Bot</b> — умный помощник для заметок.\n\n` +
-    `✨ <b>Что я умею:</b>\n` +
-    `• 🎤 Принимать голосовые заметки\n` +
-    `• 📝 Обрабатывать текстовые заметки\n` +
-    `• 🧠 Автоматически классифицировать по категориям\n` +
-    `• 📂 Хранить в папках\n\n` +
-    `Хочешь настроить папки?`;
+
+  const text =
+    `👋 Привет, <b>${name}</b>! Я <b>AI Notes Bot</b> — твой умный блокнот прямо в Telegram.\n\n` +
+
+    `<b>Как это работает:</b>\n\n` +
+
+    `📝 <b>Текстовые заметки</b>\n` +
+    `Просто напиши мне любую мысль или задачу:\n` +
+    `<i>«Купить молоко, позвонить врачу, идея для проекта»</i>\n` +
+    `Я сам разобью на части и классифицирую.\n\n` +
+
+    `🎤 <b>Голосовые заметки</b>\n` +
+    `Запиши голосовое — я распознаю речь и обработаю автоматически.\n\n` +
+
+    `🏷 <b>Теги</b>\n` +
+    `Добавляй хэштеги прямо в текст:\n` +
+    `<i>«проверить деплой #работа #срочно»</i>\n\n` +
+
+    `📂 <b>Папки</b>\n` +
+    `Заметки распределяются по папкам. Управляй ими в Mini App.\n\n` +
+
+    `📱 <b>Mini App</b>\n` +
+    `Кнопка снизу → полный интерфейс: поиск, фильтры, редактирование.\n\n` +
+
+    `─────────────────────\n` +
+    `Начнём с настройки папок?`;
 
   await sendMessage(env, msg.chat.id, text, {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '🚀 Начать настройку', callback_data: 'onboarding_start' },
+          { text: '🚀 Настроить папки', callback_data: 'onboarding_start' },
           { text: '⏭ Пропустить', callback_data: 'onboarding_skip' },
         ],
       ],
@@ -36,9 +53,8 @@ export async function handleStart(env: Env, msg: TelegramMessage): Promise<void>
   });
 }
 
-/**
- * Handles all onboarding-related callback queries.
- */
+// ─── Callback Handler ─────────────────────────────────────────────────────────
+
 export async function handleOnboardingCallback(
   env: Env,
   cbq: TelegramCallbackQuery
@@ -50,62 +66,93 @@ export async function handleOnboardingCallback(
 
   if (!chatId || !messageId) return false;
 
+  // ── Показать выбор типа онбординга ──
   if (data === 'onboarding_start') {
     await answerCallbackQuery(env, cbq.id);
     await editMessageText(
       env, chatId, messageId,
-      '📂 <b>Настройка папок</b>\n\nКак хочешь создать папки?',
+      '📂 <b>Настройка папок</b>\n\n' +
+      'Выбери, как создать папки:\n\n' +
+      '⚡ <b>Быстро</b> — создам готовый набор:\n' +
+      DEFAULT_FOLDERS.map(f => `  • ${f}`).join('\n') + '\n\n' +
+      '✏️ <b>Вручную</b> — напишешь свои названия',
       { reply_markup: onboardingChoiceKeyboard() }
     );
     return true;
   }
 
+  // ── Пропустить ──
   if (data === 'onboarding_skip') {
     await answerCallbackQuery(env, cbq.id);
     await updateUserState(env, user.id, 'idle');
-    await editMessageText(env, chatId, messageId, '✅ Отлично! Отправь голосовое или текстовое сообщение — я запишу его как заметку.');
+    await editMessageText(
+      env, chatId, messageId,
+      '✅ <b>Готово!</b>\n\n' +
+      'Отправь мне голосовое или текстовое сообщение — я запишу как заметку.\n\n' +
+      '<i>Пример: «Купить хлеб и позвонить маме #дом»</i>'
+    );
     return true;
   }
 
+  // ── Быстрый онбординг ──
   if (data === 'onboarding_quick') {
     await answerCallbackQuery(env, cbq.id);
 
     for (const name of DEFAULT_FOLDERS) {
       await createFolder(env, user.id, name);
     }
-
     await updateUserState(env, user.id, 'idle');
+
     await editMessageText(
       env, chatId, messageId,
-      '✅ <b>Папки созданы:</b>\n' + DEFAULT_FOLDERS.map(f => `• ${f}`).join('\n') +
-      '\n\nТеперь отправь голосовое или текстовое сообщение — я разберу его на заметки!'
+      '✅ <b>Папки созданы!</b>\n\n' +
+      DEFAULT_FOLDERS.map(f => `📁 ${f}`).join('\n') +
+      '\n\n' +
+      '🎉 <b>Всё готово!</b> Попробуй прямо сейчас:\n\n' +
+      '• Напиши любую мысль или задачу\n' +
+      '• Запиши голосовое сообщение\n' +
+      '• Открой Mini App кнопкой снизу для управления заметками\n\n' +
+      '<i>Пример: «Купить молоко #дом, проверить сервер #работа»</i>'
     );
     return true;
   }
 
+  // ── Ручной онбординг ──
   if (data === 'onboarding_manual') {
     await answerCallbackQuery(env, cbq.id);
     await updateUserState(env, user.id, 'onboarding_manual');
     await editMessageText(
       env, chatId, messageId,
-      '✏️ <b>Создание своих папок</b>\n\nНапиши название папки. Можно добавить несколько.\nКогда закончишь — нажми <b>Готово</b>.',
+      '✏️ <b>Создай свои папки</b>\n\n' +
+      'Напиши название папки — я её создам.\n' +
+      'Можно добавить несколько, по одной за раз.\n\n' +
+      '<i>Например: работа, учёба, здоровье, путешествия</i>\n\n' +
+      'Когда закончишь — нажми <b>Готово ✅</b>',
       { reply_markup: onboardingDoneKeyboard() }
     );
     return true;
   }
 
+  // ── Завершить ручной онбординг ──
   if (data === 'onboarding_done') {
     await answerCallbackQuery(env, cbq.id);
     const folders = await getFoldersByUserId(env, user.id);
     await updateUserState(env, user.id, 'idle');
 
     const folderList = folders.length > 0
-      ? folders.map(f => `• ${f.name}`).join('\n')
-      : '• (папки не созданы)';
+      ? folders.map(f => `📁 ${f.name}`).join('\n')
+      : '(папки не созданы — можно добавить через Mini App)';
 
     await editMessageText(
       env, chatId, messageId,
-      `✅ <b>Настройка завершена!</b>\n\n<b>Твои папки:</b>\n${folderList}\n\nТеперь отправь голосовое или текстовое сообщение!`
+      '✅ <b>Настройка завершена!</b>\n\n' +
+      '<b>Твои папки:</b>\n' + folderList +
+      '\n\n' +
+      '🎉 Теперь пробуй:\n' +
+      '• Напиши любую мысль или задачу\n' +
+      '• Запиши голосовое сообщение\n' +
+      '• Открой Mini App для управления заметками\n\n' +
+      '<i>Пример: «Купить молоко #дом, проверить сервер #работа»</i>'
     );
     return true;
   }
@@ -113,9 +160,8 @@ export async function handleOnboardingCallback(
   return false;
 }
 
-/**
- * Handles text messages during manual onboarding (folder name input).
- */
+// ─── Folder Input (manual onboarding) ────────────────────────────────────────
+
 export async function handleOnboardingFolderInput(
   env: Env,
   msg: TelegramMessage
@@ -124,17 +170,17 @@ export async function handleOnboardingFolderInput(
 
   const user = await getOrCreateUser(env, msg.from.id);
   const name = msg.text.trim().slice(0, 50);
-
   if (!name) return;
 
   await createFolder(env, user.id, name);
   const folders = await getFoldersByUserId(env, user.id);
-
-  const folderList = folders.map(f => `• ${f.name}`).join('\n');
+  const folderList = folders.map(f => `📁 ${f.name}`).join('\n');
 
   await sendMessage(
     env, msg.chat.id,
-    `✅ Папка <b>${name}</b> добавлена!\n\n<b>Папки:</b>\n${folderList}\n\nДобавь ещё или нажми <b>Готово</b>.`,
+    `✅ Папка <b>${name}</b> создана!\n\n` +
+    `<b>Папки (${folders.length}):</b>\n${folderList}\n\n` +
+    `Добавь ещё или нажми <b>Готово ✅</b>`,
     { reply_markup: onboardingDoneKeyboard() }
   );
 }

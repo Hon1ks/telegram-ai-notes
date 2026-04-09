@@ -6,11 +6,7 @@ function getInitData(): string {
   return window.Telegram?.WebApp?.initData ?? '';
 }
 
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
@@ -30,19 +26,38 @@ async function request<T>(
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
-export function getNotes(type?: NoteType, folderId?: number): Promise<Note[]> {
-  const params = new URLSearchParams();
-  if (type) params.set('type', type);
-  if (folderId !== undefined) params.set('folder_id', String(folderId));
-  const qs = params.toString();
-  return request<Note[]>('GET', `/api/notes${qs ? '?' + qs : ''}`);
+export function getNotes(params?: {
+  type?: NoteType;
+  folderId?: number;
+  tag?: string;
+}): Promise<Note[]> {
+  const qs = new URLSearchParams();
+  if (params?.type) qs.set('type', params.type);
+  if (params?.folderId !== undefined) qs.set('folder_id', String(params.folderId));
+  if (params?.tag) qs.set('tag', params.tag);
+  const q = qs.toString();
+  return request<Note[]>('GET', `/api/notes${q ? '?' + q : ''}`);
 }
 
-export function createNote(data: { text: string; type: NoteType; folder_id?: number | null }): Promise<Note> {
+export function searchNotes(query: string): Promise<Note[]> {
+  return request<Note[]>('GET', `/api/notes/search?q=${encodeURIComponent(query)}`);
+}
+
+export function createNote(data: {
+  text: string;
+  type: NoteType;
+  folder_id?: number | null;
+  tags?: string[];
+}): Promise<Note> {
   return request<Note>('POST', '/api/notes', data);
 }
 
-export function updateNote(id: number, data: { text?: string; done?: number; folder_id?: number | null }): Promise<Note> {
+export function updateNote(id: number, data: {
+  text?: string;
+  done?: number;
+  folder_id?: number | null;
+  tags?: string[];
+}): Promise<Note> {
   return request<Note>('PUT', `/api/notes/${id}`, data);
 }
 
@@ -70,4 +85,10 @@ export function deleteFolder(id: number): Promise<{ success: boolean }> {
 
 export function reorderFolders(ids: number[]): Promise<Folder[]> {
   return request<Folder[]>('POST', '/api/folders/reorder', { ids });
+}
+
+// ─── Tags ─────────────────────────────────────────────────────────────────────
+
+export function getTags(): Promise<string[]> {
+  return request<string[]>('GET', '/api/tags');
 }

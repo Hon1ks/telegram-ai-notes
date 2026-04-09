@@ -1,0 +1,31 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+}
+
+.icon { font-size: 15px; flex-shrink: 0; }
+
+.input {
+  flex: 1;
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 15px;
+}
+
+.clear {
+  font-size: 13px;
+  color: var(--hint);
+  padding: 4px;
+}
+
+.cancel {
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--accent);
+  padding: 4px 0 4px 4px;
+}

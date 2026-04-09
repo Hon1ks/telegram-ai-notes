@@ -20,8 +20,17 @@ CREATE TABLE IF NOT EXISTS notes (
   folder_id INTEGER,
   type TEXT NOT NULL DEFAULT 'notes',
   text TEXT NOT NULL,
+  tags TEXT DEFAULT '[]',
   done INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (folder_id) REFERENCES folders(id)
+);
+
+-- Full-text search
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+  text,
+  tags,
+  content=notes,
+  content_rowid=id
 );

@@ -36,10 +36,8 @@ export async function handleMessage(env: Env, msg: TelegramMessage): Promise<voi
     return;
   }
 
-  // Ignore during initial onboarding (user hasn't made a choice yet)
-  if (user.state === 'onboarding') {
-    return;
-  }
+  // Ignore during initial onboarding
+  if (user.state === 'onboarding') return;
 
   // ── Voice message ──
   if (msg.voice) {
@@ -54,7 +52,7 @@ export async function handleMessage(env: Env, msg: TelegramMessage): Promise<voi
     }
 
     if (!text) {
-      await sendMessage(env, chatId, '🤔 Не смог разобрать речь. Попробуй говорить чётче.');
+      await sendMessage(env, chatId, '🤔 Не смог разобрать речь. Говори чётче или попробуй написать текстом.');
       return;
     }
 
@@ -75,7 +73,6 @@ export async function handleMessage(env: Env, msg: TelegramMessage): Promise<voi
 export async function handleCallbackQuery(env: Env, cbq: TelegramCallbackQuery): Promise<void> {
   const handled = await handleOnboardingCallback(env, cbq);
   if (!handled) {
-    // Unknown callback — just acknowledge
     const { answerCallbackQuery } = await import('./telegram');
     await answerCallbackQuery(env, cbq.id);
   }
@@ -114,7 +111,7 @@ async function processTextNote(
   // 5. Save to DB
   for (const item of items) {
     const folderId = folderMap[item.type] ?? null;
-    await createNote(env, userId, item.type, item.text, folderId);
+    await createNote(env, userId, item.type, item.text, item.tags, folderId);
   }
 
   // 6. Build response
@@ -137,23 +134,22 @@ function buildFolderMap(folders: Array<{ id: number; name: string }>): Record<st
 }
 
 function formatResponse(items: NoteItem[]): string {
-  const grouped: Record<string, string[]> = {};
+  const grouped: Record<string, NoteItem[]> = {};
 
   for (const item of items) {
-    const key = item.type;
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(item.text);
+    if (!grouped[item.type]) grouped[item.type] = [];
+    grouped[item.type].push(item);
   }
 
   const lines: string[] = ['🧠 <b>Разобрал:</b>\n'];
 
-  for (const [type, texts] of Object.entries(grouped)) {
+  for (const [type, noteItems] of Object.entries(grouped)) {
     const label = CATEGORY_EMOJI[type] ?? `📌 ${type}`;
     lines.push(`<b>${label}:</b>`);
-    for (const t of texts) {
-      // Trim long notes
-      const display = t.length > 200 ? t.slice(0, 197) + '...' : t;
-      lines.push(`• ${display}`);
+    for (const item of noteItems) {
+      const display = item.text.length > 200 ? item.text.slice(0, 197) + '...' : item.text;
+      const tagStr = item.tags.length > 0 ? `  <i>${item.tags.join(' ')}</i>` : '';
+      lines.push(`• ${display}${tagStr}`);
     }
     lines.push('');
   }

@@ -1,81 +1,134 @@
-.wrapper {
+.wrap {
   position: relative;
-  transition: transform 150ms ease;
+  margin: 6px 12px;
 }
 
-.swipeHint {
+.deleteHint {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
+  inset: 0;
+  background: #ef4444;
+  border-radius: var(--r);
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: #ef4444;
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 0 var(--radius) var(--radius) 0;
-  z-index: 0;
+  justify-content: flex-end;
+  padding-right: 20px;
+  font-size: 22px;
+  pointer-events: none;
 }
 
 .card {
   position: relative;
+  display: flex;
+  background: var(--bg);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
   z-index: 1;
+  will-change: transform;
+}
+
+.card.done { opacity: 0.55; }
+
+.accent {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.body {
+  flex: 1;
+  padding: 11px 10px 10px 12px;
+  min-width: 0;
+}
+
+.top {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--bg-secondary);
-  transition: opacity var(--transition);
+  gap: 8px;
 }
 
-.card.done {
-  opacity: 0.5;
-}
-
-.checkbox {
-  font-size: 20px;
+/* Checkbox */
+.check {
   flex-shrink: 0;
-  padding: 2px;
+  margin-top: 1px;
+  font-size: 18px;
+  padding: 1px;
+  line-height: 1;
 }
 
-.content {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
+.circle {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--divider);
+  border-radius: 50%;
 }
+
+.checked { opacity: 1; }
+
+.content { flex: 1; min-width: 0; cursor: text; }
 
 .text {
   display: block;
   word-break: break-word;
+  font-size: 15px;
+  line-height: 1.45;
 }
+
+.textarea {
+  width: 100%;
+  resize: none;
+  background: var(--bg2);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1.45;
+  border: 2px solid var(--accent);
+}
+
+/* Delete button */
+.del {
+  flex-shrink: 0;
+  padding: 2px 4px;
+  color: var(--hint);
+  opacity: 0.5;
+  transition: opacity var(--transition);
+  margin-top: 2px;
+}
+.del:hover { opacity: 1; }
+
+/* Bottom row */
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 8px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f3e8ff;
+  color: #7c3aed;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.tag:hover { background: #ede9fe; }
 
 .date {
-  display: block;
-  font-size: 12px;
-  color: var(--text-hint);
-  margin-top: 4px;
-}
-
-.editInput {
-  resize: none;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 15px;
-  width: 100%;
-}
-
-.deleteBtn {
-  font-size: 18px;
+  font-size: 11px;
+  color: var(--hint);
+  white-space: nowrap;
   flex-shrink: 0;
-  opacity: 0.4;
-  padding: 2px 4px;
-  transition: opacity var(--transition);
-}
-
-.deleteBtn:hover {
-  opacity: 1;
 }

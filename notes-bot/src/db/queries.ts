@@ -84,7 +84,6 @@ export async function updateFolder(env: Env, folderId: number, userId: number, n
 }
 
 export async function deleteFolder(env: Env, folderId: number, userId: number): Promise<void> {
-  // Открепляем заметки из этой папки
   await env.NOTES_DB
     .prepare('UPDATE notes SET folder_id = NULL WHERE folder_id = ? AND user_id = ?')
     .bind(folderId, userId)
@@ -112,16 +111,27 @@ export async function createNote(
   userId: number,
   type: string,
   text: string,
+  tags: string[] = [],
   folderId?: number | null
 ): Promise<DbNote> {
+  const tagsJson = JSON.stringify(tags);
+
+  const result = await env.NOTES_DB
+    .prepare('INSERT INTO notes (user_id, folder_id, type, text, tags) VALUES (?, ?, ?, ?, ?)')
+    .bind(userId, folderId ?? null, type, text, tagsJson)
+    .run();
+
+  const noteId = result.meta.last_row_id;
+
+  // Update FTS index
   await env.NOTES_DB
-    .prepare('INSERT INTO notes (user_id, folder_id, type, text) VALUES (?, ?, ?, ?)')
-    .bind(userId, folderId ?? null, type, text)
+    .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
+    .bind(noteId, text, tags.join(' '))
     .run();
 
   const note = await env.NOTES_DB
-    .prepare('SELECT * FROM notes WHERE user_id = ? ORDER BY id DESC LIMIT 1')
-    .bind(userId)
+    .prepare('SELECT * FROM notes WHERE id = ?')
+    .bind(noteId)
     .first<DbNote>();
 
   return note!;
@@ -131,7 +141,8 @@ export async function getNotesByUserId(
   env: Env,
   userId: number,
   type?: string,
-  folderId?: number
+  folderId?: number,
+  tag?: string
 ): Promise<DbNote[]> {
   let query = 'SELECT * FROM notes WHERE user_id = ?';
   const params: (string | number)[] = [userId];
@@ -146,6 +157,11 @@ export async function getNotesByUserId(
     params.push(folderId);
   }
 
+  if (tag) {
+    query += " AND tags LIKE ?";
+    params.push(`%${tag}%`);
+  }
+
   query += ' ORDER BY created_at DESC';
 
   const result = await env.NOTES_DB
@@ -154,6 +170,43 @@ export async function getNotesByUserId(
     .all<DbNote>();
 
   return result.results;
+}
+
+export async function searchNotes(
+  env: Env,
+  userId: number,
+  query: string
+): Promise<DbNote[]> {
+  // Use FTS5 for full-text search
+  const result = await env.NOTES_DB
+    .prepare(`
+      SELECT n.* FROM notes n
+      JOIN notes_fts ON notes_fts.rowid = n.id
+      WHERE notes_fts MATCH ? AND n.user_id = ?
+      ORDER BY n.created_at DESC
+      LIMIT 50
+    `)
+    .bind(query + '*', userId)
+    .all<DbNote>();
+
+  return result.results;
+}
+
+export async function getUserTags(env: Env, userId: number): Promise<string[]> {
+  const notes = await env.NOTES_DB
+    .prepare('SELECT tags FROM notes WHERE user_id = ? AND tags != ? AND tags != ?')
+    .bind(userId, '[]', '')
+    .all<{ tags: string }>();
+
+  const tagSet = new Set<string>();
+  for (const row of notes.results) {
+    try {
+      const tags = JSON.parse(row.tags) as string[];
+      tags.forEach(t => tagSet.add(t));
+    } catch { /* skip */ }
+  }
+
+  return [...tagSet].sort();
 }
 
 export async function getNoteById(env: Env, noteId: number, userId: number): Promise<DbNote | null> {
@@ -167,7 +220,7 @@ export async function updateNote(
   env: Env,
   noteId: number,
   userId: number,
-  fields: { text?: string; done?: number; folder_id?: number | null }
+  fields: { text?: string; done?: number; folder_id?: number | null; tags?: string[] }
 ): Promise<void> {
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
@@ -175,6 +228,7 @@ export async function updateNote(
   if (fields.text !== undefined) { sets.push('text = ?'); params.push(fields.text); }
   if (fields.done !== undefined) { sets.push('done = ?'); params.push(fields.done); }
   if ('folder_id' in fields) { sets.push('folder_id = ?'); params.push(fields.folder_id ?? null); }
+  if (fields.tags !== undefined) { sets.push('tags = ?'); params.push(JSON.stringify(fields.tags)); }
 
   if (sets.length === 0) return;
 
@@ -183,9 +237,30 @@ export async function updateNote(
     .prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`)
     .bind(...params)
     .run();
+
+  // Update FTS if text or tags changed
+  if (fields.text !== undefined || fields.tags !== undefined) {
+    const note = await getNoteById(env, noteId, userId);
+    if (note) {
+      await env.NOTES_DB
+        .prepare('DELETE FROM notes_fts WHERE rowid = ?')
+        .bind(noteId)
+        .run();
+      const tags = JSON.parse(note.tags || '[]') as string[];
+      await env.NOTES_DB
+        .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
+        .bind(noteId, note.text, tags.join(' '))
+        .run();
+    }
+  }
 }
 
 export async function deleteNote(env: Env, noteId: number, userId: number): Promise<void> {
+  await env.NOTES_DB
+    .prepare('DELETE FROM notes_fts WHERE rowid = ?')
+    .bind(noteId)
+    .run();
+
   await env.NOTES_DB
     .prepare('DELETE FROM notes WHERE id = ? AND user_id = ?')
     .bind(noteId, userId)

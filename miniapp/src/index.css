@@ -1,50 +1,37 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: var(--tg-theme-bg-color, #ffffff);
-  --bg-secondary: var(--tg-theme-secondary-bg-color, #f4f4f5);
-  --text: var(--tg-theme-text-color, #111111);
-  --text-hint: var(--tg-theme-hint-color, #6b7280);
-  --accent: var(--tg-theme-button-color, #3b82f6);
-  --accent-text: var(--tg-theme-button-text-color, #ffffff);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --transition: 200ms ease;
+  --bg:         var(--tg-theme-bg-color, #ffffff);
+  --bg2:        var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --text:       var(--tg-theme-text-color, #111111);
+  --hint:       var(--tg-theme-hint-color, #8e8e93);
+  --accent:     var(--tg-theme-button-color, #007aff);
+  --accent-fg:  var(--tg-theme-button-text-color, #ffffff);
+  --divider:    rgba(0,0,0,.08);
+
+  --c-tasks:    #3b82f6;
+  --c-ideas:    #f59e0b;
+  --c-shopping: #22c55e;
+  --c-notes:    #8b5cf6;
+
+  --r: 14px;
+  --r-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 8px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+  --transition: 180ms cubic-bezier(.4,0,.2,1);
 }
 
 html, body, #root {
-  height: 100%;
-  background: var(--bg);
+  height: 100%; overflow: hidden;
+  background: var(--bg2);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
+  font-family: -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-size: 15px; line-height: 1.5;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  background: none;
-  font: inherit;
-  color: inherit;
-}
+button { cursor: pointer; border: none; background: none; font: inherit; color: inherit; }
+input, textarea { font: inherit; color: var(--text); outline: none; }
 
-input, textarea {
-  font: inherit;
-  color: inherit;
-  background: var(--bg-secondary);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  width: 100%;
-  outline: none;
-}
-
-input:focus, textarea:focus {
-  box-shadow: 0 0 0 2px var(--accent);
-}
+::-webkit-scrollbar { width: 0; height: 0; }

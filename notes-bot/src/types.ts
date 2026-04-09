@@ -57,6 +57,7 @@ export interface NoteItem {
   text: string;
   type: NoteType;
   category: string;
+  tags: string[];
 }
 
 // ─── DB Types ────────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ export interface DbNote {
   folder_id: number | null;
   type: string;
   text: string;
+  tags: string; // JSON string: '["#работа","#личное"]'
   done: number;
   created_at: string;
 }
