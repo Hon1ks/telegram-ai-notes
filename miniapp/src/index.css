@@ -48,6 +48,17 @@ html, body, #root {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* Browser dev preview: phone-like frame on desktop */
+html[data-dev-preview] body {
+  max-width: 430px;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px var(--divider), 0 8px 40px rgba(0, 0, 0, 0.35);
+}
+
+html[data-dev-preview] {
+  background: #0f0f10;
+}
+
 button { cursor: pointer; border: none; background: none; font: inherit; color: inherit; }
 input, textarea { font: inherit; color: var(--text); outline: none; }
 

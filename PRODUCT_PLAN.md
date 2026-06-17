@@ -1,7 +1,7 @@
 # План доработки до готового продукта
 
 > Создан: 17 июня 2026  
-> Обновлён: 17 июня 2026  
+> Обновлён: 17 июня 2026 (после dev:web)
 > Ветка: `feature/mvp-hardening`  
 > Цель: полный готовый продукт (не только MVP)
 
@@ -24,7 +24,8 @@
 **CI:** зелёный + ESLint в pipeline  
 **Production D1:** миграции `0002`, `0003` применены; **`0004` нужно применить** (`wrangler d1 migrations apply`)  
 **Deploy:** `.github/workflows/deploy.yml` (push → `main`, нужны secrets)  
-**Следующий шаг:** smoke/e2e из `SMOKE_TEST.md`, деплой
+**Dev-превью в браузере:** `46a42b4` — `npm run dev:api` + `npm run dev:web` (см. корневой `package.json`)  
+**Следующий шаг:** smoke/e2e из `SMOKE_TEST.md`, миграция `0004`, деплой
 
 ---
 
@@ -48,6 +49,14 @@
 **Осталось (после фазы 7):**
 - Финальный smoke/e2e из `SMOKE_TEST.md`
 - Применить миграцию `0004_phase7.sql` на production D1
+- Деплой worker + miniapp на production
+
+**Локальный просмотр UI (без Telegram):**
+```bash
+npm run dev:api    # notes-bot → :8787
+npm run gen:auth   # один раз, из miniapp/
+npm run dev:web    # miniapp → :5173
+```
 - Vitest для miniapp (отложен с Фазы 2)
 - Создать staging D1 + R2 bucket в Cloudflare (инструкции в `wrangler.jsonc`, `RESTORE.md`)
 

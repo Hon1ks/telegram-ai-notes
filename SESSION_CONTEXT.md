@@ -3,7 +3,7 @@
 > Этот файл сохраняет ключевые решения и историю обсуждения, чтобы при новом чате (после перезагрузки ПК) агент мог быстро войти в контекст.  
 > **Обновляй этот файл** после каждой значимой сессии работы над проектом.
 
-**Последнее обновление:** 17 июня 2026 (Фаза 7 выполнена — v1.0 feature-complete)
+**Последнее обновление:** 17 июня 2026 (Фаза 7 + dev:web превью)
 
 ---
 
@@ -18,7 +18,7 @@
 
 **Стек:** TypeScript, Cloudflare Workers/D1/Pages, React 18 + Vite, Groq, OpenRouter.
 
-**Статус:** MVP готов, идёт hardening на ветке `feature/mvp-hardening`.
+**Статус:** v1.0 feature-complete на ветке `feature/mvp-hardening`. Осталось: smoke/e2e, миграция `0004`, деплой.
 
 ---
 
@@ -203,6 +203,18 @@
 - Тесты: `api-trash`, `api-export`, `api-reminders`, `trash-queries` — **63/63**
 
 **Следующий шаг:** smoke/e2e, `wrangler d1 migrations apply`, деплой
+
+### 17.06.2026 — Dev-превью Mini App в браузере
+
+**Сделано:**
+- `npm run dev:web` / `gen:auth` — Mini App без Telegram (`46a42b4`)
+- Мок `Telegram.WebApp` + прокси `/api` → `localhost:8787`
+- Корневой `package.json`: `dev:api`, `dev:web`, `gen:auth`
+- Тёмная тема и phone-frame в dev-превью (локально, не в prod build)
+
+**Заметка:** локальная D1 пустая — заметок нет; для 1:1 с prod открывать через бота или указать production `VITE_API_URL`.
+
+**Следующий шаг:** smoke/e2e, деплой
 
 ### [Дата] — [Тема сессии]
 
