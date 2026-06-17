@@ -39,8 +39,21 @@ export function getNotes(params?: {
   return request<Note[]>('GET', `/api/notes${q ? '?' + q : ''}`);
 }
 
-export function searchNotes(query: string): Promise<Note[]> {
-  return request<Note[]>('GET', `/api/notes/search?q=${encodeURIComponent(query)}`);
+export function searchNotes(query: string, signal?: AbortSignal): Promise<Note[]> {
+  return fetch(`${API_URL}/api/notes/search?q=${encodeURIComponent(query)}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `tma ${getInitData()}`,
+    },
+    signal,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
+      throw new Error(err.error ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<Note[]>;
+  });
 }
 
 export function createNote(data: {

@@ -1,0 +1,8 @@
+TELEGRAM_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+OPENROUTER_API_KEY=
+STT_API_KEY=
+MINIAPP_ORIGIN=https://notes-miniapp.pages.dev
+MINIAPP_URL=https://notes-miniapp.pages.dev
+LLM_MODEL=stepfun/step-3.5-flash:free
+LLM_TIMEOUT_MS=30000

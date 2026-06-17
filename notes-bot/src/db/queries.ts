@@ -39,7 +39,26 @@ export async function updateUserState(env: Env, userId: number, state: string): 
 
 // ─── Folders ─────────────────────────────────────────────────────────────────
 
-export async function createFolder(env: Env, userId: number, name: string): Promise<DbFolder> {
+export async function claimUpdateId(env: Env, updateId: number): Promise<boolean> {
+  try {
+    const result = await env.NOTES_DB
+      .prepare('INSERT OR IGNORE INTO processed_updates (update_id) VALUES (?)')
+      .bind(updateId)
+      .run();
+
+    return result.meta.changes > 0;
+  } catch {
+    // Allow processing when migrations are not yet applied.
+    return true;
+  }
+}
+
+export async function createFolder(
+  env: Env,
+  userId: number,
+  name: string,
+  category?: string | null
+): Promise<DbFolder> {
   const count = await env.NOTES_DB
     .prepare('SELECT COUNT(*) as cnt FROM folders WHERE user_id = ?')
     .bind(userId)
@@ -48,8 +67,8 @@ export async function createFolder(env: Env, userId: number, name: string): Prom
   const sortOrder = (count?.cnt ?? 0);
 
   await env.NOTES_DB
-    .prepare('INSERT INTO folders (user_id, name, sort_order) VALUES (?, ?, ?)')
-    .bind(userId, name, sortOrder)
+    .prepare('INSERT INTO folders (user_id, name, category, sort_order) VALUES (?, ?, ?, ?)')
+    .bind(userId, name, category ?? null, sortOrder)
     .run();
 
   const folder = await env.NOTES_DB
@@ -91,7 +110,21 @@ export async function getFolderById(env: Env, folderId: number, userId: number):
     .first<DbFolder>();
 }
 
-export async function updateFolder(env: Env, folderId: number, userId: number, name: string): Promise<void> {
+export async function updateFolder(
+  env: Env,
+  folderId: number,
+  userId: number,
+  name: string,
+  category?: string | null
+): Promise<void> {
+  if (category !== undefined) {
+    await env.NOTES_DB
+      .prepare('UPDATE folders SET name = ?, category = ? WHERE id = ? AND user_id = ?')
+      .bind(name, category, folderId, userId)
+      .run();
+    return;
+  }
+
   await env.NOTES_DB
     .prepare('UPDATE folders SET name = ? WHERE id = ? AND user_id = ?')
     .bind(name, folderId, userId)
@@ -99,15 +132,14 @@ export async function updateFolder(env: Env, folderId: number, userId: number, n
 }
 
 export async function deleteFolder(env: Env, folderId: number, userId: number): Promise<void> {
-  await env.NOTES_DB
-    .prepare('UPDATE notes SET folder_id = NULL WHERE folder_id = ? AND user_id = ?')
-    .bind(folderId, userId)
-    .run();
-
-  await env.NOTES_DB
-    .prepare('DELETE FROM folders WHERE id = ? AND user_id = ?')
-    .bind(folderId, userId)
-    .run();
+  await env.NOTES_DB.batch([
+    env.NOTES_DB
+      .prepare('UPDATE notes SET folder_id = NULL WHERE folder_id = ? AND user_id = ?')
+      .bind(folderId, userId),
+    env.NOTES_DB
+      .prepare('DELETE FROM folders WHERE id = ? AND user_id = ?')
+      .bind(folderId, userId),
+  ]);
 }
 
 export async function reorderFolders(env: Env, userId: number, orderedIds: number[]): Promise<void> {
@@ -157,7 +189,9 @@ export async function getNotesByUserId(
   userId: number,
   type?: string,
   folderId?: number,
-  tag?: string
+  tag?: string,
+  limit = 50,
+  offset = 0
 ): Promise<DbNote[]> {
   let query = 'SELECT * FROM notes WHERE user_id = ?';
   const params: (string | number)[] = [userId];
@@ -173,11 +207,12 @@ export async function getNotesByUserId(
   }
 
   if (tag) {
-    query += " AND tags LIKE ?";
-    params.push(`%${tag}%`);
+    query += ' AND EXISTS (SELECT 1 FROM json_each(notes.tags) WHERE value = ?)';
+    params.push(tag.toLowerCase());
   }
 
-  query += ' ORDER BY created_at DESC';
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
 
   const result = await env.NOTES_DB
     .prepare(query)
@@ -192,6 +227,9 @@ export async function searchNotes(
   userId: number,
   query: string
 ): Promise<DbNote[]> {
+  const ftsQuery = buildFtsQuery(query);
+  if (!ftsQuery) return [];
+
   // Use FTS5 for full-text search
   const result = await env.NOTES_DB
     .prepare(`
@@ -201,10 +239,18 @@ export async function searchNotes(
       ORDER BY n.created_at DESC
       LIMIT 50
     `)
-    .bind(query + '*', userId)
+    .bind(ftsQuery, userId)
     .all<DbNote>();
 
   return result.results;
+}
+
+export function buildFtsQuery(query: string): string {
+  const terms = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
+  return terms
+    .slice(0, 10)
+    .map(term => `"${term.replaceAll('"', '""')}"*`)
+    .join(' AND ');
 }
 
 export async function getUserTags(env: Env, userId: number): Promise<string[]> {
@@ -235,7 +281,13 @@ export async function updateNote(
   env: Env,
   noteId: number,
   userId: number,
-  fields: { text?: string; done?: number; folder_id?: number | null; tags?: string[] }
+  fields: {
+    text?: string;
+    done?: number;
+    folder_id?: number | null;
+    tags?: string[];
+    type?: string;
+  }
 ): Promise<void> {
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
@@ -244,6 +296,7 @@ export async function updateNote(
   if (fields.done !== undefined) { sets.push('done = ?'); params.push(fields.done); }
   if ('folder_id' in fields) { sets.push('folder_id = ?'); params.push(fields.folder_id ?? null); }
   if (fields.tags !== undefined) { sets.push('tags = ?'); params.push(JSON.stringify(fields.tags)); }
+  if (fields.type !== undefined) { sets.push('type = ?'); params.push(fields.type); }
 
   if (sets.length === 0) return;
 
@@ -271,13 +324,12 @@ export async function updateNote(
 }
 
 export async function deleteNote(env: Env, noteId: number, userId: number): Promise<void> {
-  await env.NOTES_DB
-    .prepare('DELETE FROM notes_fts WHERE rowid = ?')
-    .bind(noteId)
-    .run();
-
-  await env.NOTES_DB
-    .prepare('DELETE FROM notes WHERE id = ? AND user_id = ?')
-    .bind(noteId, userId)
-    .run();
+  await env.NOTES_DB.batch([
+    env.NOTES_DB
+      .prepare('DELETE FROM notes_fts WHERE rowid = ?')
+      .bind(noteId),
+    env.NOTES_DB
+      .prepare('DELETE FROM notes WHERE id = ? AND user_id = ?')
+      .bind(noteId, userId),
+  ]);
 }

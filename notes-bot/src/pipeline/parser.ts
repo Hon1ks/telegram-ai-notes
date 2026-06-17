@@ -1,5 +1,7 @@
-import type { Env, NoteItem } from '../types';
+import type { Env, NoteItem, NoteType } from '../types';
 import { processNotes, retryProcessNotes } from './llm';
+
+export const MAX_NOTE_ITEMS = 10;
 
 /**
  * Extracts #hashtags from raw text using regex.
@@ -16,22 +18,24 @@ export function extractTags(text: string): string[] {
 export async function parseNotes(env: Env, text: string): Promise<NoteItem[]> {
   const extractedTags = extractTags(text);
 
-  // Attempt 1
   try {
     const raw = await processNotes(env, text);
-    return extractItems(raw, text, extractedTags);
+    return parseLlmResponse(raw, text, extractedTags);
   } catch {
-    // Attempt 2 — retry with correction prompt
     try {
       const raw2 = await retryProcessNotes(env, text);
-      return extractItems(raw2, text, extractedTags);
+      return parseLlmResponse(raw2, text, extractedTags);
     } catch {
       return fallback(text, extractedTags);
     }
   }
 }
 
-function extractItems(raw: string, originalText: string, globalTags: string[]): NoteItem[] {
+export function parseLlmResponse(
+  raw: string,
+  originalText: string,
+  globalTags: string[]
+): NoteItem[] {
   let parsed: { items?: unknown };
 
   try {
@@ -44,20 +48,21 @@ function extractItems(raw: string, originalText: string, globalTags: string[]): 
     throw new Error('Empty or missing items array');
   }
 
-  return (parsed.items as Array<Record<string, unknown>>).map((item) => {
-    const text = typeof item.text === 'string' ? item.text.trim() : originalText;
-    const type = isValidType(item.type) ? item.type : 'notes';
-    const category = typeof item.category === 'string' ? item.category : type;
-    // Merge global tags (from full text) with per-item tags if LLM returns them
-    const itemTags = Array.isArray(item.tags)
-      ? (item.tags as string[]).filter(t => typeof t === 'string')
-      : [];
-    const tags = [...new Set([...globalTags, ...itemTags])];
-    return { text, type, category, tags };
-  });
+  return (parsed.items as Array<Record<string, unknown>>)
+    .slice(0, MAX_NOTE_ITEMS)
+    .map((item) => {
+      const itemText = typeof item.text === 'string' ? item.text.trim() : originalText;
+      const type = isValidType(item.type) ? item.type : 'notes';
+      const category = typeof item.category === 'string' ? item.category : type;
+      const itemTags = Array.isArray(item.tags)
+        ? (item.tags as string[]).filter(t => typeof t === 'string')
+        : [];
+      const tags = [...new Set([...globalTags, ...itemTags])];
+      return { text: itemText, type, category, tags };
+    });
 }
 
-function isValidType(v: unknown): v is NoteItem['type'] {
+function isValidType(v: unknown): v is NoteType {
   return v === 'tasks' || v === 'ideas' || v === 'shopping' || v === 'notes';
 }
 

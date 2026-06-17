@@ -157,3 +157,18 @@
   font-size: 15px;
   font-weight: 600;
 }
+
+.fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 28px;
+  line-height: 1;
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+}

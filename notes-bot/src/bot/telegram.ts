@@ -8,7 +8,17 @@ async function call(token: string, method: string, body: object): Promise<unknow
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return res.json();
+  const data = await res.json() as {
+    ok?: boolean;
+    description?: string;
+    result?: unknown;
+  };
+
+  if (!res.ok || data.ok === false) {
+    throw new Error(`Telegram ${method} failed: ${data.description ?? res.status}`);
+  }
+
+  return data;
 }
 
 export async function sendMessage(
@@ -79,4 +89,19 @@ export async function downloadFile(env: Env, fileId: string): Promise<ArrayBuffe
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to download file: ${res.status}`);
   return res.arrayBuffer();
+}
+
+export async function setChatMenuButton(
+  env: Env,
+  chatId: number,
+  webAppUrl: string
+): Promise<void> {
+  await call(env.TELEGRAM_TOKEN, 'setChatMenuButton', {
+    chat_id: chatId,
+    menu_button: {
+      type: 'web_app',
+      text: '📱 Mini App',
+      web_app: { url: webAppUrl },
+    },
+  });
 }

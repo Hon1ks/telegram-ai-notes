@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Note, Folder, FilterType } from './types';
+import type { Note, Folder, FilterType, NoteType } from './types';
 import * as api from './api/client';
 import { FilterBar } from './components/FilterBar';
 import { FolderStrip } from './components/FolderStrip';
 import { NoteList } from './components/NoteList';
 import { FolderManager } from './components/FolderManager';
 import { SearchBar } from './components/SearchBar';
+import { Toast } from './components/Toast';
+import { NoteComposer } from './components/NoteComposer';
 import s from './App.module.css';
 
 type Tab = 'notes' | 'folders';
@@ -14,7 +16,7 @@ export default function App() {
   const [tab, setTab]               = useState<Tab>('notes');
   const [filter, setFilter]         = useState<FilterType>('all');
   const [activeTag, setActiveTag]   = useState<string | null>(null);
-  const [activeFolderId, setActiveFolderId] = useState<number | null>(null); // null=все, -1=без папки
+  const [activeFolderId, setActiveFolderId] = useState<number | null>(null);
   const [foldersVisible, setFoldersVisible] = useState(false);
   const [notes, setNotes]           = useState<Note[]>([]);
   const [folders, setFolders]       = useState<Folder[]>([]);
@@ -22,11 +24,16 @@ export default function App() {
   const [tags, setTags]             = useState<string[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [toast, setToast]           = useState<string | null>(null);
   const [searching, setSearching]   = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [composerOpen, setComposerOpen] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
 
-  // ── Load data ──────────────────────────────────────────────────────────────
+  const showError = useCallback((message: string) => {
+    setToast(message);
+  }, []);
 
   const loadNotes = useCallback(async () => {
     setLoading(true);
@@ -35,95 +42,137 @@ export default function App() {
       const data = await api.getNotes({
         type: filter === 'all' ? undefined : filter,
         tag: activeTag ?? undefined,
-        // -1 means "no folder" → pass special marker; worker handles null folder_id
         folderId: activeFolderId === null ? undefined : activeFolderId === -1 ? undefined : activeFolderId,
       });
-      // Client-side filter for "no folder"
       const filtered = activeFolderId === -1
         ? data.filter(n => n.folder_id === null)
         : data;
       setNotes(filtered);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      const message = e instanceof Error ? e.message : 'Ошибка загрузки';
+      setError(message);
+      showError(message);
     } finally {
       setLoading(false);
     }
-  }, [filter, activeTag, activeFolderId]);
+  }, [filter, activeTag, activeFolderId, showError]);
 
   const loadFolders = useCallback(async () => {
     try {
       const res = await api.getFolders();
       setFolders(res.folders);
       setUncategorized(res.uncategorized);
-    } catch { /* ok */ }
-  }, []);
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Ошибка загрузки папок');
+    }
+  }, [showError]);
 
   const loadTags = useCallback(async () => {
-    try { setTags(await api.getTags()); } catch { /* ok */ }
-  }, []);
+    try {
+      setTags(await api.getTags());
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Ошибка загрузки тегов');
+    }
+  }, [showError]);
 
   useEffect(() => {
-    if (!searching) { loadNotes(); loadTags(); }
+    if (!searching) {
+      loadNotes();
+      loadTags();
+    }
   }, [loadNotes, loadTags, searching]);
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
 
-  // Reload folders after note changes to keep counts fresh
   async function refreshAll() {
     await Promise.all([loadNotes(), loadFolders(), loadTags()]);
   }
 
-  // ── Search ─────────────────────────────────────────────────────────────────
-
   function handleSearchChange(q: string) {
     setSearchQuery(q);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!q.trim()) { loadNotes(); return; }
+    if (searchAbort.current) searchAbort.current.abort();
+
+    if (!q.trim()) {
+      loadNotes();
+      return;
+    }
+
     searchTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
       setLoading(true);
-      try { setNotes(await api.searchNotes(q.trim())); }
-      catch { /* ok */ }
-      finally { setLoading(false); }
+      try {
+        const results = await api.searchNotes(q.trim(), controller.signal);
+        if (!controller.signal.aborted) setNotes(results);
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
+        showError(e instanceof Error ? e.message : 'Ошибка поиска');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }, 300);
   }
 
   function openSearch()  { setSearching(true); setSearchQuery(''); }
   function closeSearch() {
-    setSearching(false); setSearchQuery('');
+    setSearching(false);
+    setSearchQuery('');
     if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (searchAbort.current) searchAbort.current.abort();
     loadNotes();
   }
-
-  // ── Folder strip ───────────────────────────────────────────────────────────
 
   function handleFolderSelect(id: number | null) {
     setActiveFolderId(id);
     setActiveTag(null);
   }
 
-  // ── Note actions ───────────────────────────────────────────────────────────
-
   async function handleToggle(id: number, done: number) {
+    const prev = notes;
+    setNotes(n => n.map(item => item.id === id ? { ...item, done } : item));
     try {
       const updated = await api.updateNote(id, { done });
-      setNotes(prev => prev.map(n => n.id === id ? updated : n));
-    } catch { /* ok */ }
+      setNotes(n => n.map(item => item.id === id ? updated : item));
+    } catch (e) {
+      setNotes(prev);
+      showError(e instanceof Error ? e.message : 'Не удалось обновить заметку');
+    }
   }
 
   async function handleDelete(id: number) {
+    const prev = notes;
+    setNotes(n => n.filter(item => item.id !== id));
     try {
       await api.deleteNote(id);
-      setNotes(prev => prev.filter(n => n.id !== id));
-      loadFolders(); // refresh counts
+      loadFolders();
       loadTags();
-    } catch { /* ok */ }
+    } catch (e) {
+      setNotes(prev);
+      showError(e instanceof Error ? e.message : 'Не удалось удалить заметку');
+    }
   }
 
   async function handleEdit(id: number, text: string) {
     try {
       const updated = await api.updateNote(id, { text });
-      setNotes(prev => prev.map(n => n.id === id ? updated : n));
-    } catch { /* ok */ }
+      setNotes(n => n.map(item => item.id === id ? updated : item));
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Не удалось сохранить заметку');
+    }
+  }
+
+  async function handleCreate(text: string, type: NoteType) {
+    try {
+      const note = await api.createNote({ text, type });
+      setNotes(prev => [note, ...prev]);
+      loadFolders();
+      loadTags();
+      setToast('Заметка создана');
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Не удалось создать заметку');
+      throw e;
+    }
   }
 
   function handleTagClick(tag: string) {
@@ -133,19 +182,14 @@ export default function App() {
     setSearching(false);
   }
 
-  // Active folder name for banner
   const activeFolderName = activeFolderId === null
     ? null
     : activeFolderId === -1
       ? '📥 Без папки'
       : folders.find(f => f.id === activeFolderId)?.name ?? null;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className={s.app}>
-
-      {/* ── Header ── */}
       <header className={s.header}>
         {searching ? (
           <SearchBar value={searchQuery} onChange={handleSearchChange} onClose={closeSearch} />
@@ -178,10 +222,8 @@ export default function App() {
         )}
       </header>
 
-      {/* ── Notes tab ── */}
       {tab === 'notes' && (
         <div className={s.notesView}>
-
           {!searching && (
             <>
               <FilterBar
@@ -205,7 +247,6 @@ export default function App() {
             </>
           )}
 
-          {/* Active folder banner */}
           {activeFolderName && (
             <div className={s.folderBanner}>
               <span>📂 {activeFolderName}</span>
@@ -213,7 +254,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Active tag banner */}
           {activeTag && !activeFolderName && (
             <div className={s.tagBanner}>
               <span>🏷 {activeTag}</span>
@@ -237,15 +277,30 @@ export default function App() {
               onTagClick={handleTagClick}
             />
           )}
+
+          <button
+            className={s.fab}
+            onClick={() => setComposerOpen(true)}
+            aria-label="Создать заметку"
+          >
+            +
+          </button>
         </div>
       )}
 
-      {/* ── Folders tab ── */}
       {tab === 'folders' && (
         <div className={s.foldersView}>
           <FolderManager folders={folders} onUpdate={loadFolders} />
         </div>
       )}
+
+      <NoteComposer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onSubmit={handleCreate}
+      />
+
+      <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

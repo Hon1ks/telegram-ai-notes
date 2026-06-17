@@ -1,8 +1,13 @@
 export interface Env {
   NOTES_DB: D1Database;
   TELEGRAM_TOKEN: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   OPENROUTER_API_KEY: string;
   STT_API_KEY: string;
+  MINIAPP_ORIGIN?: string;
+  MINIAPP_URL?: string;
+  LLM_MODEL?: string;
+  LLM_TIMEOUT_MS?: string;
 }
 
 // ─── Telegram Types ───────────────────────────────────────────────────────────
@@ -73,6 +78,7 @@ export interface DbFolder {
   id: number;
   user_id: number;
   name: string;
+  category: string | null;
   sort_order: number;
   note_count: number;
   created_at: string;

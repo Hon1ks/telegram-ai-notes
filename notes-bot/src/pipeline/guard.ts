@@ -8,7 +8,7 @@ import { callLLM } from './llm';
 export function cheapGuard(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 5) return false;
-  if (trimmed.includes('?')) return false;
+  if (trimmed.startsWith('/')) return false;
   return true;
 }
 

@@ -2,100 +2,161 @@ import type { Env } from '../types';
 import { authenticate, jsonResponse, errorResponse } from './auth';
 import {
   getNotesByUserId, getNoteById, createNote, updateNote, deleteNote,
-  searchNotes, getUserTags,
+  searchNotes, getUserTags, getFolderById,
 } from '../db/queries';
+import {
+  isNoteType,
+  parsePositiveInt,
+  readJsonBody,
+  validateFolderId,
+  validateNoteText,
+  validateTags,
+} from './validation';
 
-export async function handleNotesApi(env: Env, request: Request, path: string): Promise<Response> {
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+export async function handleNotesApi(
+  env: Env,
+  request: Request,
+  path: string,
+  requestId: string
+): Promise<Response> {
+  const headers = { 'X-Request-Id': requestId };
   const user = await authenticate(env, request);
-  if (!user) return errorResponse('Unauthorized', 401);
+  if (!user) return errorResponse('Unauthorized', 401, request, env, headers);
 
   const url = new URL(request.url);
 
-  // GET /api/tags — all user tags
   if (request.method === 'GET' && path === '/api/tags') {
     const tags = await getUserTags(env, user.id);
-    return jsonResponse(tags);
+    return jsonResponse(tags, 200, request, env, headers);
   }
 
-  // GET /api/notes/search?q=...
   if (request.method === 'GET' && path === '/api/notes/search') {
     const q = url.searchParams.get('q')?.trim();
-    if (!q) return jsonResponse([]);
+    if (!q) return jsonResponse([], 200, request, env, headers);
+    if (q.length > 200) return errorResponse('search query is too long', 400, request, env, headers);
     const notes = await searchNotes(env, user.id, q);
-    return jsonResponse(notes);
+    return jsonResponse(notes, 200, request, env, headers);
   }
 
-  // GET /api/notes
   if (request.method === 'GET' && path === '/api/notes') {
     const type = url.searchParams.get('type') ?? undefined;
     const folderIdStr = url.searchParams.get('folder_id');
-    const folderId = folderIdStr ? parseInt(folderIdStr) : undefined;
+    const folderId = folderIdStr === null ? undefined : parsePositiveInt(folderIdStr);
     const tag = url.searchParams.get('tag') ?? undefined;
+    const limitRaw = parsePositiveInt(url.searchParams.get('limit') ?? String(DEFAULT_LIMIT));
+    const offsetRaw = Number(url.searchParams.get('offset') ?? '0');
+    const limit = Math.min(limitRaw ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const offset = Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
 
-    const notes = await getNotesByUserId(env, user.id, type, folderId, tag);
-    return jsonResponse(notes);
+    if (type !== undefined && !isNoteType(type)) return errorResponse('invalid type', 400, request, env, headers);
+    if (folderIdStr !== null && folderId === undefined) {
+      return errorResponse('invalid folder_id', 400, request, env, headers);
+    }
+
+    const notes = await getNotesByUserId(env, user.id, type, folderId, tag, limit, offset);
+    return jsonResponse(notes, 200, request, env, headers);
   }
 
-  // POST /api/notes
   if (request.method === 'POST' && path === '/api/notes') {
-    const body = await request.json() as {
+    const body = await readJsonBody<{
       text?: string;
       type?: string;
       folder_id?: number | null;
       tags?: string[];
-    };
+    }>(request);
+    if (!body) return errorResponse('invalid JSON', 400, request, env, headers);
 
-    if (!body.text?.trim()) return errorResponse('text is required');
+    const text = validateNoteText(body.text);
+    const type = body.type ?? 'notes';
+    const folderId = validateFolderId(body.folder_id ?? null);
+    const tags = validateTags(body.tags);
 
-    const note = await createNote(
-      env,
-      user.id,
-      body.type ?? 'notes',
-      body.text.trim(),
-      body.tags ?? [],
-      body.folder_id ?? null
-    );
+    if (!text) return errorResponse('text is required and must be at most 10000 characters', 400, request, env, headers);
+    if (!isNoteType(type)) return errorResponse('invalid type', 400, request, env, headers);
+    if (folderId === undefined) return errorResponse('invalid folder_id', 400, request, env, headers);
+    if (tags === null) return errorResponse('invalid tags', 400, request, env, headers);
+    if (folderId !== null && !(await getFolderById(env, folderId, user.id))) {
+      return errorResponse('folder not found', 404, request, env, headers);
+    }
 
-    return jsonResponse(note, 201);
+    const note = await createNote(env, user.id, type, text, tags, folderId);
+    return jsonResponse(note, 201, request, env, headers);
   }
 
-  // Match /api/notes/:id
   const noteIdMatch = path.match(/^\/api\/notes\/(\d+)$/);
-  if (!noteIdMatch) return errorResponse('Not found', 404);
-  const noteId = parseInt(noteIdMatch[1]);
+  if (!noteIdMatch) return errorResponse('Not found', 404, request, env, headers);
+  const noteId = parsePositiveInt(noteIdMatch[1]);
+  if (!noteId) return errorResponse('Not found', 404, request, env, headers);
 
-  // GET /api/notes/:id
   if (request.method === 'GET') {
     const note = await getNoteById(env, noteId, user.id);
-    if (!note) return errorResponse('Not found', 404);
-    return jsonResponse(note);
+    if (!note) return errorResponse('Not found', 404, request, env, headers);
+    return jsonResponse(note, 200, request, env, headers);
   }
 
-  // PUT /api/notes/:id
   if (request.method === 'PUT') {
-    const body = await request.json() as {
+    const body = await readJsonBody<{
       text?: string;
       done?: number;
       folder_id?: number | null;
       tags?: string[];
-    };
+      type?: string;
+    }>(request);
+    if (!body) return errorResponse('invalid JSON', 400, request, env, headers);
 
     const note = await getNoteById(env, noteId, user.id);
-    if (!note) return errorResponse('Not found', 404);
+    if (!note) return errorResponse('Not found', 404, request, env, headers);
 
-    await updateNote(env, noteId, user.id, body);
+    const fields: {
+      text?: string;
+      done?: number;
+      folder_id?: number | null;
+      tags?: string[];
+      type?: string;
+    } = {};
+
+    if ('text' in body) {
+      const text = validateNoteText(body.text);
+      if (!text) return errorResponse('invalid text', 400, request, env, headers);
+      fields.text = text;
+    }
+    if ('done' in body) {
+      if (body.done !== 0 && body.done !== 1) return errorResponse('done must be 0 or 1', 400, request, env, headers);
+      fields.done = body.done;
+    }
+    if ('folder_id' in body) {
+      const folderId = validateFolderId(body.folder_id);
+      if (folderId === undefined) return errorResponse('invalid folder_id', 400, request, env, headers);
+      if (folderId !== null && !(await getFolderById(env, folderId, user.id))) {
+        return errorResponse('folder not found', 404, request, env, headers);
+      }
+      fields.folder_id = folderId;
+    }
+    if ('tags' in body) {
+      const tags = validateTags(body.tags);
+      if (tags === null) return errorResponse('invalid tags', 400, request, env, headers);
+      fields.tags = tags;
+    }
+    if ('type' in body) {
+      if (!body.type || !isNoteType(body.type)) return errorResponse('invalid type', 400, request, env, headers);
+      fields.type = body.type;
+    }
+
+    await updateNote(env, noteId, user.id, fields);
     const updated = await getNoteById(env, noteId, user.id);
-    return jsonResponse(updated);
+    return jsonResponse(updated, 200, request, env, headers);
   }
 
-  // DELETE /api/notes/:id
   if (request.method === 'DELETE') {
     const note = await getNoteById(env, noteId, user.id);
-    if (!note) return errorResponse('Not found', 404);
+    if (!note) return errorResponse('Not found', 404, request, env, headers);
 
     await deleteNote(env, noteId, user.id);
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true }, 200, request, env, headers);
   }
 
-  return errorResponse('Method not allowed', 405);
+  return errorResponse('Method not allowed', 405, request, env, headers);
 }

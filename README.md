@@ -80,6 +80,7 @@ npm install
 
 # Add secrets
 npx wrangler secret put TELEGRAM_TOKEN
+npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 npx wrangler secret put OPENROUTER_API_KEY
 npx wrangler secret put STT_API_KEY
 
@@ -89,9 +90,13 @@ npx wrangler deploy
 
 ### 2. Set Webhook
 
-Replace `<TOKEN>` with your bot token:
-```
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://notes-bot-simple.goorbunoov95.workers.dev/webhook
+Replace the placeholders with your values. The webhook secret must contain only
+letters, digits, `_` and `-`.
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://notes-bot-simple.goorbunoov95.workers.dev/webhook","secret_token":"<WEBHOOK_SECRET>"}'
 ```
 
 ### 3. Deploy Mini App
@@ -153,8 +158,8 @@ Select your bot and register:
 
 ## 🔮 Future Improvements
 
-- [ ] Full-text search
-- [ ] Tags (#work, #personal)
+- [x] Full-text search
+- [x] Tags (#work, #personal)
 - [ ] Reminders & notifications
 - [ ] Export notes (JSON, Markdown)
 - [ ] Analytics dashboard
@@ -167,9 +172,14 @@ Select your bot and register:
 ### Worker (`notes-bot`)
 
 ```bash
-TELEGRAM_TOKEN=      # Telegram bot token
-OPENROUTER_API_KEY=  # OpenRouter API key
-STT_API_KEY=         # Groq API key
+TELEGRAM_TOKEN=          # Telegram bot token
+TELEGRAM_WEBHOOK_SECRET= # Secret used to validate Telegram webhook requests
+OPENROUTER_API_KEY=      # OpenRouter API key
+STT_API_KEY=             # Groq API key
+MINIAPP_ORIGIN=          # Allowed CORS origin (e.g. https://notes-miniapp.pages.dev)
+MINIAPP_URL=             # Mini App URL for /app command and menu button
+LLM_MODEL=               # Optional OpenRouter model override
+LLM_TIMEOUT_MS=          # Optional LLM timeout in milliseconds
 ```
 
 ### Mini App (`miniapp`)
