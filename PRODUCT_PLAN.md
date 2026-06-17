@@ -1,10 +1,29 @@
 # План доработки до готового продукта
 
 > Создан: 17 июня 2026  
+> Обновлён: 17 июня 2026  
 > Ветка: `feature/mvp-hardening`  
 > Цель: полный готовый продукт (не только MVP)
 
 Связанные документы: [IMPROVEMENT_ROADMAP.md](./IMPROVEMENT_ROADMAP.md), [SMOKE_TEST.md](./SMOKE_TEST.md), [SESSION_CONTEXT.md](./SESSION_CONTEXT.md)
+
+---
+
+## Прогресс (5 из 7 фаз)
+
+| Фаза | Статус | Коммит | Тесты |
+|------|--------|--------|-------|
+| 1. Блокеры запуска | ✅ Готово | `f226f9f` | 40 → 47 |
+| 2. Тесты backend | ✅ Готово | `e7041cf` | API + integration |
+| 3. Кастомные категории | ✅ Готово | `f3e119c` | +7 API tests |
+| 4. Mini App UX | ✅ Готово | `bf6ab14` | build OK |
+| 5. UX Telegram-бота | ✅ Готово | `94823d7` | 48/48 |
+| 6. Ops / CI/CD | ⬜ Осталось | — | — |
+| 7. Напоминания / экспорт / корзина | ⬜ Осталось | — | — |
+
+**CI:** зелёный (после `724f9e4` — `package-lock.json` в репо)  
+**Production D1:** миграции `0002`, `0003` применены  
+**Следующий шаг:** Фаза 6
 
 ---
 
@@ -17,15 +36,20 @@
 
 ## Текущее состояние
 
-MVP функционален: AI-pipeline, D1 + FTS, Mini App, security, CI, unit-тесты ядра.
+**Сделано (фазы 1–5):**
+- Async webhook, LLM fallback, FTS batch, KV rate limit, cleanup
+- 48 тестов backend (CRUD, изоляция, integration, categories)
+- Кастомные категории: API + AI pipeline + CategoryManager в Mini App
+- Mini App: полное редактирование, пагинация, поиск+фильтры, undo, dark theme
+- Бот: STT confirm, кнопки после сохранения, undo, inline перемещение
+- CI на GitHub Actions (notes-bot + miniapp build)
 
-**Главные пробелы:**
-- надёжность webhook и fallback при сбое AI;
-- целостность FTS и бэкапы;
-- API-тесты (CRUD, изоляция пользователей);
-- кастомные категории (сейчас 4 жёстких типа);
-- незавершённый UX Mini App и бота;
-- эксплуатация (staging, мониторинг, автодеплой).
+**Осталось (фазы 6–7):**
+- Structured logs, D1 backup → R2, staging, ESLint, автодеплой
+- Per-user daily cap на LLM/STT
+- Напоминания, экспорт JSON/MD, корзина (soft delete)
+- Финальный smoke/e2e из `SMOKE_TEST.md`
+- Vitest для miniapp (отложен с Фазы 2)
 
 ```mermaid
 flowchart LR
@@ -56,49 +80,40 @@ flowchart LR
 
 ---
 
-## Фаза 1. Блокеры запуска (P0–P1, ~1 неделя)
+## Фаза 1. Блокеры запуска ✅ (P0–P1)
 
-### 1.1 Async webhook
+### 1.1 Async webhook ✅
 
-**Файл:** `notes-bot/src/index.ts`
+**Файл:** `notes-bot/src/index.ts` — `ctx.waitUntil()` после `claimUpdateId`.
 
-Webhook ждёт STT + LLM + D1 синхронно. Перенести тяжёлую работу в `ctx.waitUntil()` — сразу `200 OK` после `claimUpdateId`.
+### 1.2 Не терять заметку при сбое LLM ✅
 
-### 1.2 Не терять заметку при сбое LLM
+**Файл:** `notes-bot/src/bot/processNote.ts` — fallback → категория `notes` + предупреждение.
 
-**Файл:** `notes-bot/src/bot/handlers.ts`
+### 1.3 FTS + транзакции ✅
 
-При ошибке guard/parse заметка теряется. Сохранять сырую заметку с дефолтной категорией и уведомлять пользователя.
+**Файл:** `notes-bot/src/db/queries.ts` — `batch` для note+FTS; миграция `0002_fts_backfill.sql`.
 
-### 1.3 FTS + транзакции
+### 1.4 Rate limit и cleanup ✅
 
-**Файл:** `notes-bot/src/db/queries.ts`
-
-`createNote`/`updateNote` — note и FTS отдельно. Обернуть в `batch`, добавить миграцию backfill.
-
-### 1.4 Rate limit и cleanup
-
-- `notes-bot/src/util/rateLimit.ts` → Cloudflare KV
-- Cron-очистка `processed_updates` старше 7 дней
+- [x] `notes-bot/src/util/rateLimit.ts` — KV + memory fallback
+- [x] Cron cleanup `processed_updates` (7 дней)
 
 ---
 
-## Фаза 2. Тесты (P1, ~1 неделя)
+## Фаза 2. Тесты ✅ (P1)
 
-Расширить `notes-bot/test/index.spec.ts` и добавить `test/api-*.spec.ts`:
-
-- CRUD заметок/папок с mock `initData`
-- Изоляция пользователей (чужая заметка → 404)
-- FTS search после create/update
-- Integration с mock OpenRouter/Groq/Telegram
-
-Добавить Vitest для miniapp, подключить в `.github/workflows/ci.yml`.
+- [x] CRUD заметок/папок с mock `initData` (`api-notes`, `api-folders`)
+- [x] Изоляция пользователей (чужая заметка → 404)
+- [x] FTS search после create/update
+- [x] Integration: text, voice, LLM fallback (`integration.spec.ts`)
+- [ ] Vitest для miniapp — отложено (CI: только `npm run build`)
 
 ---
 
-## Фаза 3. Кастомные категории (P1, must-have v1.0, ~1–2 недели)
+## Фаза 3. Кастомные категории ✅ (P1, must-have v1.0)
 
-### 3.1 Схема данных
+### 3.1 Схема данных ✅
 
 ```sql
 CREATE TABLE categories (
@@ -118,71 +133,71 @@ CREATE TABLE categories (
 
 - `notes.type` → хранить `slug` категории
 - `folders.category` → FK на slug/id категории
-- Миграция: seed 4 системных категорий для существующих пользователей
+- [x] Миграция `0003_categories.sql` + seed для существующих users
 
-### 3.2 Backend API
+### 3.2 Backend API ✅
 
-Новый `notes-bot/src/api/categories.ts`:
+- [x] `GET/POST/PUT/DELETE /api/categories` — лимит 20, валидация
+- [x] Системные (`is_system=1`) нельзя удалить
+- [x] Обновлены: `validation.ts`, `notes.ts`, `folders.ts`, `index.ts`
 
-- `GET/POST/PUT/DELETE /api/categories`
-- Лимит 20 категорий, валидация slug/name/color
-- Системные (`is_system=1`) нельзя удалить
+### 3.3 AI-pipeline ✅
 
-Обновить: `validation.ts`, `notes.ts`, `folders.ts`, `index.ts`
+- [x] `llm.ts` — динамический промпт из категорий пользователя
+- [x] `parser.ts` — валидация slug, fallback → `notes`
+- [x] `handlers.ts` / `processNote.ts` — emoji/маппинг папок из categories
 
-### 3.3 AI-pipeline
+### 3.4 Mini App UI ✅
 
-- `llm.ts` — динамический промпт из категорий пользователя
-- `parser.ts` — валидация slug, fallback → `notes`
-- `handlers.ts` — emoji/маппинг папок из categories, не хардкод
+- [x] `CategoryManager` — CRUD категорий
+- [x] Динамические `FilterBar`, `NoteComposer`, `NoteCard`, `NoteList`
+- [x] `types.ts` — slug вместо жёсткого `NoteType`
 
-### 3.4 Mini App UI
+### 3.5 Онбординг ✅
 
-- `CategoryManager` — CRUD категорий
-- Динамические `FilterBar`, `NoteComposer`, `NoteCard`
-- `types.ts` — slug вместо жёсткого `NoteType`
+- [x] 4 системные категории при `getOrCreateUser`
+- [ ] Опциональный шаг «добавь свои категории» — не делали
 
-### 3.5 Онбординг
+### 3.6 Тесты ✅
 
-При создании пользователя — 4 системные категории. Опционально шаг «добавь свои категории».
-
-### 3.6 Тесты
-
-CRUD API, динамический LLM prompt, запрет удаления системных, фильтр по кастомной категории.
+- [x] `api-categories.spec.ts` — 7 тестов
 
 ---
 
-## Фаза 4. Mini App UX (P1–P2, ~1 неделя)
+## Фаза 4. Mini App UX ✅ (P1–P2)
 
-- Полное редактирование: текст + категория + папка + теги
-- Пагинация (API уже поддерживает `limit`/`offset`)
-- Поиск с активными фильтрами
-- Undo при удалении, pull-to-refresh
-- Тёмная тема: исправить `--divider` в `miniapp/src/index.css`
-- Safe area, `aria-label`
-
----
-
-## Фаза 5. UX Telegram-бота (P2, ~3–5 дней)
-
-- Кнопки «Отменить» / «Открыть Mini App» после сохранения
-- Undo последнего сохранения (5–10 сек)
-- Подтверждение STT-текста перед сохранением
-- Inline «Переместить в категорию/папку»
+- [x] `NoteEditor` — текст + категория + папка + теги
+- [x] Пагинация: `limit`/`offset`, infinite scroll (30 заметок)
+- [x] Поиск с активными фильтрами (категория, тег, папка)
+- [x] Undo при удалении (toast 5 сек)
+- [x] Pull-to-refresh
+- [x] Тёмная тема: `--divider` через `color-mix`
+- [x] Safe area, `aria-label`
 
 ---
 
-## Фаза 6. Эксплуатация и CI/CD (P1, ~1 неделя)
+## Фаза 5. UX Telegram-бота ✅ (P2)
 
-- Structured logs: `duration_ms`, `service`, `outcome`
-- D1 backup → R2 (cron), `RESTORE.md`
-- Staging env + отдельная D1 в `wrangler.jsonc`
-- ESLint, автодеплой, `wrangler d1 migrations`
-- Per-user daily cap на LLM/STT
+- [x] Кнопки «Отменить» / «Mini App» / «Переместить» после сохранения
+- [x] Undo последнего сохранения (inline callback)
+- [x] Подтверждение STT: «Сохранить» / «Отменить» перед обработкой
+- [x] Inline перемещение: категория → папка (`bot/actions.ts`)
 
 ---
 
-## Фаза 7. Продуктовые фичи v1.0 (P2–P3, ~2 недели)
+## Фаза 6. Эксплуатация и CI/CD ⬜ (P1)
+
+- [ ] Structured logs: `duration_ms`, `service`, `outcome`
+- [ ] D1 backup → R2 (cron), `RESTORE.md`
+- [ ] Staging env + отдельная D1 в `wrangler.jsonc`
+- [ ] ESLint, автодеплой, `wrangler d1 migrations`
+- [ ] Per-user daily cap на LLM/STT
+- [x] CI GitHub Actions: `tsc` + tests + miniapp build
+- [x] `package-lock.json` в репо (fix CI cache)
+
+---
+
+## Фаза 7. Продуктовые фичи v1.0 ⬜ (P2–P3)
 
 | Фича | Описание |
 |------|----------|
@@ -204,17 +219,15 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 ## Порядок и сроки
 
 ```
-Фаза 1 (блокеры)              → 5–7 дней
-Фаза 2 (тесты)                → 5–7 дней   [параллельно]
-Фаза 3 (кастомные категории)  → 7–14 дней  [ключевая фича]
-Фаза 4 (Mini App UX)          → 7 дней     [параллельно с 3.4]
-Фаза 5 (бот UX)               → 3–5 дней
-Фаза 6 (ops/CI)               → 5–7 дней   [параллельно]
-Фаза 7 (напоминания/экспорт)  → 14 дней
-Финальный smoke из SMOKE_TEST.md
+✅ Фаза 1 (блокеры)              — готово
+✅ Фаза 2 (тесты backend)        — готово
+✅ Фаза 3 (кастомные категории)  — готово
+✅ Фаза 4 (Mini App UX)          — готово
+✅ Фаза 5 (бот UX)               — готово
+⬜ Фаза 6 (ops/CI)               — следующая
+⬜ Фаза 7 (напоминания/экспорт)  — после 6
+⬜ Финальный smoke из SMOKE_TEST.md
 ```
-
-**Итого:** ~6–8 недель последовательно, ~5–6 недель с параллелизацией.
 
 ---
 
@@ -222,25 +235,28 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 
 - [x] Пользователь создаёт, редактирует и удаляет свои категории; AI классифицирует по ним
 - [x] 4 системные категории по умолчанию, можно переименовать
-- [ ] Заметка не теряется при сбое AI
-- [ ] Webhook < 1 сек; FTS синхронен с данными
-- [ ] API + категории покрыты тестами; CI зелёный
-- [ ] Mini App: полное управление заметками и категориями
-- [ ] Бэкап D1, staging, мониторинг
+- [x] Заметка не теряется при сбое AI (fallback → `notes`)
+- [x] Webhook < 1 сек (`waitUntil`); FTS синхронен с данными (`batch`)
+- [x] API + категории покрыты тестами (48); CI зелёный
+- [x] Mini App: полное управление заметками и категориями
+- [x] Бот: STT confirm, undo, inline move, кнопки после сохранения
+- [ ] Бэкап D1, staging, structured logs, мониторинг
 - [ ] Напоминания, экспорт, корзина
 - [ ] SMOKE_TEST.md пройден end-to-end
 
 ---
 
-## Чеклист задач
+## Чеклист задач (краткий)
 
-- [x] Фаза 1: Async webhook, LLM fallback, FTS batch, KV rate limit (memory/KV), cleanup
-- [x] Фаза 2: API/integration тесты backend (miniapp tests — в Фазе 4)
-- [x] Фаза 3a: Таблица categories, миграция, seed
-- [x] Фаза 3b: CRUD /api/categories
-- [x] Фаза 3c: Динамический LLM prompt и parser
-- [x] Фаза 3d: CategoryManager, динамический UI
-- [x] Фаза 4: Редактирование, пагинация, поиск+фильтры, undo, dark theme
-- [x] Фаза 5: Undo бота, кнопки, STT confirm, inline actions
-- [ ] Фаза 6: Metrics, backup, staging, lint, автодеплой
-- [ ] Фаза 7: Напоминания, экспорт, корзина, smoke/e2e
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Async webhook, LLM fallback, FTS batch, rate limit, cleanup | ✅ |
+| 2 | API/integration тесты backend | ✅ |
+| 3a | Таблица `categories`, миграция, seed | ✅ |
+| 3b | CRUD `/api/categories` | ✅ |
+| 3c | Динамический LLM prompt и parser | ✅ |
+| 3d | CategoryManager, динамический UI | ✅ |
+| 4 | Mini App: редактирование, пагинация, поиск, undo, dark theme | ✅ |
+| 5 | Бот: undo, кнопки, STT confirm, inline move | ✅ |
+| 6 | Metrics, backup, staging, lint, автодеплой | ⬜ |
+| 7 | Напоминания, экспорт, корзина, smoke/e2e | ⬜ |
