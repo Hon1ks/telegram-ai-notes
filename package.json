@@ -1,0 +1,11 @@
+{
+  "name": "telegram-ai-notes",
+  "private": true,
+  "scripts": {
+    "test": "npm test --prefix notes-bot",
+    "dev:api": "npm run dev --prefix notes-bot",
+    "dev:web": "npm run dev:web --prefix miniapp",
+    "gen:auth": "npm run gen:auth --prefix miniapp",
+    "build:web": "npm run build --prefix miniapp"
+  }
+}

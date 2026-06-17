@@ -1,5 +1,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html[data-dev-preview] body::before {
+  content: 'DEV PREVIEW';
+  position: fixed;
+  top: env(safe-area-inset-top, 0);
+  right: 8px;
+  z-index: 9999;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 0 0 6px 6px;
+  background: #f59e0b;
+  color: #1c1c1e;
+  pointer-events: none;
+}
+
 :root {
   --bg:         var(--tg-theme-bg-color, #ffffff);
   --bg2:        var(--tg-theme-secondary-bg-color, #f2f2f7);
