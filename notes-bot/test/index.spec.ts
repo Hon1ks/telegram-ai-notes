@@ -2,6 +2,7 @@ import { env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:
 import { describe, expect, it } from 'vitest';
 import worker from '../src';
 import { validateInitData } from '../src/api/auth';
+import { createInitData, TEST_BOT_TOKEN, TEST_NOW_SECONDS } from './helpers/auth';
 import { escapeHtml } from '../src/bot/html';
 import { extractTags, parseLlmResponse, MAX_NOTE_ITEMS } from '../src/pipeline/parser';
 import { cheapGuard } from '../src/pipeline/guard';
@@ -241,70 +242,19 @@ describe('database helpers', () => {
 });
 
 describe('Telegram Mini App authentication', () => {
-  const botToken = '123456:test-token';
-  const now = 1_800_000_000;
-
   it('accepts valid and recent initData', async () => {
-    const initData = await createInitData(botToken, now - 60, 123456);
-    expect(await validateInitData(initData, botToken, now)).toBe(123456);
+    const initData = await createInitData(TEST_BOT_TOKEN, TEST_NOW_SECONDS - 60, 123456);
+    expect(await validateInitData(initData, TEST_BOT_TOKEN, TEST_NOW_SECONDS)).toBe(123456);
   });
 
   it('rejects expired initData', async () => {
-    const initData = await createInitData(botToken, now - 25 * 60 * 60, 123456);
-    expect(await validateInitData(initData, botToken, now)).toBeNull();
+    const initData = await createInitData(TEST_BOT_TOKEN, TEST_NOW_SECONDS - 25 * 60 * 60, 123456);
+    expect(await validateInitData(initData, TEST_BOT_TOKEN, TEST_NOW_SECONDS)).toBeNull();
   });
 
   it('rejects a forged hash', async () => {
-    const initData = await createInitData(botToken, now - 60, 123456);
+    const initData = await createInitData(TEST_BOT_TOKEN, TEST_NOW_SECONDS - 60, 123456);
     const forged = initData.replace(/hash=[a-f0-9]+/, `hash=${'0'.repeat(64)}`);
-    expect(await validateInitData(forged, botToken, now)).toBeNull();
+    expect(await validateInitData(forged, TEST_BOT_TOKEN, TEST_NOW_SECONDS)).toBeNull();
   });
 });
-
-async function createInitData(
-  botToken: string,
-  authDate: number,
-  userId: number
-): Promise<string> {
-  const params = new URLSearchParams({
-    auth_date: String(authDate),
-    query_id: 'test-query',
-    user: JSON.stringify({ id: userId, first_name: 'Test' }),
-  });
-  const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${value}`)
-    .join('\n');
-  const encoder = new TextEncoder();
-
-  const webAppDataKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode('WebAppData'),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const secretKey = await crypto.subtle.sign(
-    'HMAC',
-    webAppDataKey,
-    encoder.encode(botToken)
-  );
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    secretKey,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    hmacKey,
-    encoder.encode(dataCheckString)
-  );
-  const hash = Array.from(new Uint8Array(signature))
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('');
-
-  params.set('hash', hash);
-  return params.toString();
-}

@@ -125,7 +125,18 @@
 - KV rate limit (с fallback на memory; KV — после `wrangler login`)
 - Тесты: webhook async, FTS create, cleanup; D1 schema setup
 
-**Следующий шаг:** Фаза 2 — API/integration тесты
+**Следующий шаг:** Фаза 3 — кастомные категории
+
+### 17.06.2026 — Фаза 2: API и integration тесты
+
+**Сделано:**
+- `test/helpers/` — auth, apiFetch, fetch mocks
+- `test/api-notes.spec.ts` — CRUD, фильтры, поиск, изоляция
+- `test/api-folders.spec.ts` — CRUD, reorder, изоляция
+- `test/integration.spec.ts` — mock LLM/Telegram/Groq, webhook text/voice/fallback
+- 40 тестов проходят
+
+**Следующий шаг:** Фаза 3 — кастомные категории
 
 ### [Дата] — [Тема сессии]
 
