@@ -18,6 +18,18 @@ export function mockTelegramMessaging(times = 12): void {
 
   fetchMock
     .get(TELEGRAM_ORIGIN)
+    .intercept({ path: /\/editMessageText$/, method: 'POST' })
+    .reply(200, { ok: true, result: true })
+    .times(times);
+
+  fetchMock
+    .get(TELEGRAM_ORIGIN)
+    .intercept({ path: /\/answerCallbackQuery$/, method: 'POST' })
+    .reply(200, { ok: true, result: true })
+    .times(times);
+
+  fetchMock
+    .get(TELEGRAM_ORIGIN)
     .intercept({ path: /\/sendChatAction$/, method: 'POST' })
     .reply(200, { ok: true, result: true })
     .times(times);

@@ -26,13 +26,15 @@ export async function sendMessage(
   chatId: number,
   text: string,
   extra: object = {}
-): Promise<void> {
-  await call(env.TELEGRAM_TOKEN, 'sendMessage', {
+): Promise<number | null> {
+  const data = await call(env.TELEGRAM_TOKEN, 'sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: 'HTML',
     ...extra,
-  });
+  }) as { result?: { message_id?: number } };
+
+  return data.result?.message_id ?? null;
 }
 
 export async function editMessageText(
