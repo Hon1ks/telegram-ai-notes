@@ -108,5 +108,15 @@ export interface DbNote {
   text: string;
   tags: string; // JSON string: '["#работа","#личное"]'
   done: number;
+  deleted_at: string | null;
+  remind_at: string | null;
   created_at: string;
+}
+
+export interface DueReminder {
+  note_id: number;
+  user_id: number;
+  telegram_id: string;
+  text: string;
+  remind_at: string;
 }

@@ -76,6 +76,41 @@
   font-weight: 700;
 }
 
+.iconBtn {
+  padding: 6px 8px;
+  color: var(--hint);
+  border-radius: var(--r-sm);
+  transition: color var(--transition), background var(--transition);
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.iconBtn:hover { color: var(--text); }
+
+.iconBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.iconBtnActive {
+  color: var(--text);
+  background: var(--bg2);
+}
+
+.trashBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 16px;
+  background: color-mix(in srgb, #ef4444 10%, var(--bg));
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
 /* Search button */
 .searchBtn {
   padding: 6px;

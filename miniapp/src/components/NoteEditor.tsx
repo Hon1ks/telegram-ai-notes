@@ -8,6 +8,7 @@ export interface NoteEditData {
   type: NoteType;
   folder_id: number | null;
   tags: string[];
+  remind_at: string | null;
 }
 
 interface Props {
@@ -26,11 +27,28 @@ function parseTagsInput(raw: string): string[] {
     .slice(0, 10);
 }
 
+function formatRemindAtForInput(value: string | null): string {
+  if (!value) return '';
+  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  const d = new Date(normalized);
+  if (!Number.isFinite(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function remindAtFromInput(value: string): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 export function NoteEditor({ note, categories, folders, onClose, onSave }: Props) {
   const [text, setText] = useState('');
   const [type, setType] = useState<NoteType>('notes');
   const [folderId, setFolderId] = useState<number | null>(null);
   const [tagsInput, setTagsInput] = useState('');
+  const [remindAt, setRemindAt] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -39,6 +57,7 @@ export function NoteEditor({ note, categories, folders, onClose, onSave }: Props
     setType(note.type);
     setFolderId(note.folder_id);
     setTagsInput(parseTags(note.tags).join(', '));
+    setRemindAt(formatRemindAtForInput(note.remind_at));
   }, [note]);
 
   if (!note) return null;
@@ -53,6 +72,7 @@ export function NoteEditor({ note, categories, folders, onClose, onSave }: Props
         type,
         folder_id: folderId,
         tags: parseTagsInput(tagsInput),
+        remind_at: remindAtFromInput(remindAt),
       });
       onClose();
     } finally {
@@ -117,6 +137,16 @@ export function NoteEditor({ note, categories, folders, onClose, onSave }: Props
           placeholder="работа, важное"
         />
         <span className={s.hint}>Через запятую, до 10 тегов</span>
+
+        <label className={s.label} htmlFor="note-editor-remind">Напоминание</label>
+        <input
+          id="note-editor-remind"
+          className={s.input}
+          type="datetime-local"
+          value={remindAt}
+          onChange={e => setRemindAt(e.target.value)}
+        />
+        <span className={s.hint}>Оставь пустым, чтобы убрать напоминание</span>
 
         <div className={s.actions}>
           <button type="button" className={s.cancelBtn} onClick={onClose}>Отмена</button>

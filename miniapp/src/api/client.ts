@@ -32,6 +32,7 @@ export function getNotes(params?: {
   tag?: string;
   limit?: number;
   offset?: number;
+  trash?: boolean;
 }): Promise<Note[]> {
   const qs = new URLSearchParams();
   if (params?.type) qs.set('type', params.type);
@@ -39,6 +40,7 @@ export function getNotes(params?: {
   if (params?.tag) qs.set('tag', params.tag);
   if (params?.limit !== undefined) qs.set('limit', String(params.limit));
   if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+  if (params?.trash) qs.set('trash', '1');
   const q = qs.toString();
   return request<Note[]>('GET', `/api/notes${q ? '?' + q : ''}`);
 }
@@ -65,6 +67,7 @@ export function createNote(data: {
   type: NoteType;
   folder_id?: number | null;
   tags?: string[];
+  remind_at?: string | null;
 }): Promise<Note> {
   return request<Note>('POST', '/api/notes', data);
 }
@@ -75,12 +78,43 @@ export function updateNote(id: number, data: {
   folder_id?: number | null;
   tags?: string[];
   type?: NoteType;
+  remind_at?: string | null;
 }): Promise<Note> {
   return request<Note>('PUT', `/api/notes/${id}`, data);
 }
 
 export function deleteNote(id: number): Promise<{ success: boolean }> {
   return request<{ success: boolean }>('DELETE', `/api/notes/${id}`);
+}
+
+export function restoreNote(id: number): Promise<Note> {
+  return request<Note>('POST', `/api/notes/${id}/restore`);
+}
+
+export function permanentDeleteNote(id: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('DELETE', `/api/notes/${id}/permanent`);
+}
+
+export async function exportNotes(format: 'json' | 'md'): Promise<void> {
+  const res = await fetch(`${API_URL}/api/export?format=${format}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `tma ${getInitData()}`,
+    },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = format === 'md' ? 'notes-export.md' : 'notes-export.json';
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Folders ─────────────────────────────────────────────────────────────────

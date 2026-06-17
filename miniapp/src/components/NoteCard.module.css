@@ -132,3 +132,20 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+.trashActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.restoreBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #22c55e 14%, var(--bg2));
+  color: #22c55e;
+  font-size: 16px;
+  line-height: 1;
+}

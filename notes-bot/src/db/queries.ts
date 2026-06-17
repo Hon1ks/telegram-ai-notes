@@ -1,4 +1,4 @@
-import type { Env, DbUser, DbFolder, DbNote, DbCategory } from '../types';
+import type { Env, DbUser, DbFolder, DbNote, DbCategory, DueReminder } from '../types';
 import {
   DEFAULT_CATEGORY_SLUG,
   MAX_CATEGORIES_PER_USER,
@@ -83,7 +83,7 @@ export async function getCategoriesByUserId(env: Env, userId: number): Promise<D
     .prepare(`
       SELECT c.*, COUNT(n.id) as note_count
       FROM categories c
-      LEFT JOIN notes n ON n.user_id = c.user_id AND n.type = c.slug
+      LEFT JOIN notes n ON n.user_id = c.user_id AND n.type = c.slug AND n.deleted_at IS NULL
       WHERE c.user_id = ?
       GROUP BY c.id
       ORDER BY c.sort_order ASC, c.id ASC
@@ -268,7 +268,7 @@ export async function getFoldersByUserId(env: Env, userId: number): Promise<DbFo
     .prepare(`
       SELECT f.*, COUNT(n.id) as note_count
       FROM folders f
-      LEFT JOIN notes n ON n.folder_id = f.id
+      LEFT JOIN notes n ON n.folder_id = f.id AND n.deleted_at IS NULL
       WHERE f.user_id = ?
       GROUP BY f.id
       ORDER BY f.sort_order ASC, f.id ASC
@@ -281,7 +281,7 @@ export async function getFoldersByUserId(env: Env, userId: number): Promise<DbFo
 
 export async function getUncategorizedCount(env: Env, userId: number): Promise<number> {
   const row = await env.NOTES_DB
-    .prepare('SELECT COUNT(*) as cnt FROM notes WHERE user_id = ? AND folder_id IS NULL')
+    .prepare('SELECT COUNT(*) as cnt FROM notes WHERE user_id = ? AND folder_id IS NULL AND deleted_at IS NULL')
     .bind(userId)
     .first<{ cnt: number }>();
   return row?.cnt ?? 0;
@@ -373,10 +373,17 @@ export async function getNotesByUserId(
   folderId?: number,
   tag?: string,
   limit = 50,
-  offset = 0
+  offset = 0,
+  trash = false
 ): Promise<DbNote[]> {
   let query = 'SELECT * FROM notes WHERE user_id = ?';
   const params: (string | number)[] = [userId];
+
+  if (trash) {
+    query += ' AND deleted_at IS NOT NULL';
+  } else {
+    query += ' AND deleted_at IS NULL';
+  }
 
   if (type) {
     query += ' AND type = ?';
@@ -393,7 +400,9 @@ export async function getNotesByUserId(
     params.push(tag.toLowerCase());
   }
 
-  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  query += trash
+    ? ' ORDER BY deleted_at DESC LIMIT ? OFFSET ?'
+    : ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const result = await env.NOTES_DB
@@ -417,7 +426,7 @@ export async function searchNotes(
     .prepare(`
       SELECT n.* FROM notes n
       JOIN notes_fts ON notes_fts.rowid = n.id
-      WHERE notes_fts MATCH ? AND n.user_id = ?
+      WHERE notes_fts MATCH ? AND n.user_id = ? AND n.deleted_at IS NULL
       ORDER BY n.created_at DESC
       LIMIT 50
     `)
@@ -437,7 +446,7 @@ export function buildFtsQuery(query: string): string {
 
 export async function getUserTags(env: Env, userId: number): Promise<string[]> {
   const notes = await env.NOTES_DB
-    .prepare('SELECT tags FROM notes WHERE user_id = ? AND tags != ? AND tags != ?')
+    .prepare('SELECT tags FROM notes WHERE user_id = ? AND deleted_at IS NULL AND tags != ? AND tags != ?')
     .bind(userId, '[]', '')
     .all<{ tags: string }>();
 
@@ -452,9 +461,18 @@ export async function getUserTags(env: Env, userId: number): Promise<string[]> {
   return [...tagSet].sort();
 }
 
-export async function getNoteById(env: Env, noteId: number, userId: number): Promise<DbNote | null> {
+export async function getNoteById(
+  env: Env,
+  noteId: number,
+  userId: number,
+  options?: { includeDeleted?: boolean }
+): Promise<DbNote | null> {
+  let query = 'SELECT * FROM notes WHERE id = ? AND user_id = ?';
+  if (!options?.includeDeleted) {
+    query += ' AND deleted_at IS NULL';
+  }
   return env.NOTES_DB
-    .prepare('SELECT * FROM notes WHERE id = ? AND user_id = ?')
+    .prepare(query)
     .bind(noteId, userId)
     .first<DbNote>();
 }
@@ -469,6 +487,7 @@ export async function updateNote(
     folder_id?: number | null;
     tags?: string[];
     type?: string;
+    remind_at?: string | null;
   }
 ): Promise<void> {
   const sets: string[] = [];
@@ -479,6 +498,7 @@ export async function updateNote(
   if ('folder_id' in fields) { sets.push('folder_id = ?'); params.push(fields.folder_id ?? null); }
   if (fields.tags !== undefined) { sets.push('tags = ?'); params.push(JSON.stringify(fields.tags)); }
   if (fields.type !== undefined) { sets.push('type = ?'); params.push(fields.type); }
+  if ('remind_at' in fields) { sets.push('remind_at = ?'); params.push(fields.remind_at ?? null); }
 
   if (sets.length === 0) return;
 
@@ -529,13 +549,110 @@ export async function cleanupProcessedUpdates(
   return result.meta.changes ?? 0;
 }
 
-export async function deleteNote(env: Env, noteId: number, userId: number): Promise<void> {
-  await env.NOTES_DB.batch([
-    env.NOTES_DB
+async function removeNoteFromFts(env: Env, noteId: number): Promise<void> {
+  try {
+    await env.NOTES_DB
       .prepare('DELETE FROM notes_fts WHERE rowid = ?')
-      .bind(noteId),
-    env.NOTES_DB
-      .prepare('DELETE FROM notes WHERE id = ? AND user_id = ?')
-      .bind(noteId, userId),
-  ]);
+      .bind(noteId)
+      .run();
+  } catch {
+    // Ignore FTS cleanup errors (row may already be absent).
+  }
+}
+
+async function upsertNoteInFts(env: Env, noteId: number, text: string, tagsForFts: string): Promise<void> {
+  await removeNoteFromFts(env, noteId);
+  await env.NOTES_DB
+    .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
+    .bind(noteId, text, tagsForFts)
+    .run();
+}
+
+export async function deleteNote(env: Env, noteId: number, userId: number): Promise<void> {
+  await removeNoteFromFts(env, noteId);
+  await env.NOTES_DB
+    .prepare('DELETE FROM notes WHERE id = ? AND user_id = ?')
+    .bind(noteId, userId)
+    .run();
+}
+
+export async function softDeleteNote(env: Env, noteId: number, userId: number): Promise<void> {
+  await env.NOTES_DB
+    .prepare(`UPDATE notes SET deleted_at = datetime('now') WHERE id = ? AND user_id = ? AND deleted_at IS NULL`)
+    .bind(noteId, userId)
+    .run();
+  await removeNoteFromFts(env, noteId);
+}
+
+export async function restoreNote(env: Env, noteId: number, userId: number): Promise<void> {
+  const note = await env.NOTES_DB
+    .prepare('SELECT * FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL')
+    .bind(noteId, userId)
+    .first<DbNote>();
+
+  if (!note) return;
+
+  const tagsForFts = (JSON.parse(note.tags || '[]') as string[]).join(' ');
+
+  await env.NOTES_DB
+    .prepare('UPDATE notes SET deleted_at = NULL WHERE id = ? AND user_id = ?')
+    .bind(noteId, userId)
+    .run();
+
+  await upsertNoteInFts(env, noteId, note.text, tagsForFts);
+}
+
+export async function purgeOldTrash(env: Env, retentionDays = 30): Promise<number> {
+  const result = await env.NOTES_DB
+    .prepare(
+      `SELECT id, user_id FROM notes
+       WHERE deleted_at IS NOT NULL
+         AND deleted_at < datetime('now', ?)`
+    )
+    .bind(`-${retentionDays} days`)
+    .all<{ id: number; user_id: number }>();
+
+  for (const row of result.results) {
+    await deleteNote(env, row.id, row.user_id);
+  }
+
+  return result.results.length;
+}
+
+export async function getDueReminders(env: Env, limit = 100): Promise<DueReminder[]> {
+  const result = await env.NOTES_DB
+    .prepare(
+      `SELECT n.id as note_id, n.user_id, n.text, n.remind_at, u.telegram_id
+       FROM notes n
+       JOIN users u ON u.id = n.user_id
+       WHERE n.deleted_at IS NULL
+         AND n.remind_at IS NOT NULL
+         AND n.remind_at <= datetime('now')
+       ORDER BY n.remind_at ASC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<DueReminder>();
+
+  return result.results;
+}
+
+export async function clearReminder(env: Env, noteId: number, userId: number): Promise<void> {
+  await env.NOTES_DB
+    .prepare('UPDATE notes SET remind_at = NULL WHERE id = ? AND user_id = ?')
+    .bind(noteId, userId)
+    .run();
+}
+
+export async function getAllNotesForExport(env: Env, userId: number): Promise<DbNote[]> {
+  const result = await env.NOTES_DB
+    .prepare(
+      `SELECT * FROM notes
+       WHERE user_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC`
+    )
+    .bind(userId)
+    .all<DbNote>();
+
+  return result.results;
 }

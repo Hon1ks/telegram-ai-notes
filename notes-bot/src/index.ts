@@ -3,18 +3,21 @@ import { handleMessage, handleCallbackQuery } from './bot/handlers';
 import { handleNotesApi } from './api/notes';
 import { handleFoldersApi } from './api/folders';
 import { handleCategoriesApi } from './api/categories';
+import { handleExportApi } from './api/export';
 import { corsHeaders, errorResponse } from './api/auth';
 import { sendMessage } from './bot/telegram';
-import { claimUpdateId, cleanupProcessedUpdates } from './db/queries';
+import { claimUpdateId, cleanupProcessedUpdates, purgeOldTrash } from './db/queries';
 import { checkRateLimit, getClientIp } from './util/rateLimit';
 import { errorKind, logError, logInfo, logService, timed } from './util/logger';
 import { backupD1ToR2 } from './ops/backup';
+import { processDueReminders } from './ops/reminders';
 
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
 const WEBHOOK_RATE_LIMIT = 60;
 const API_RATE_LIMIT = 120;
 const RATE_WINDOW_MS = 60_000;
 const PROCESSED_UPDATES_RETENTION_DAYS = 7;
+const TRASH_RETENTION_DAYS = 30;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -88,6 +91,10 @@ export default {
           return await timed('api', 'categories_api', () => handleCategoriesApi(env, request, path, requestId), apiFields);
         }
 
+        if (path === '/api/export') {
+          return await timed('api', 'export_api', () => handleExportApi(env, request, requestId), apiFields);
+        }
+
         return errorResponse('Not found', 404, request, env, { 'X-Request-Id': requestId });
       } catch (err) {
         logService('error', 'api', 'api_handler_failed', {
@@ -107,11 +114,24 @@ export default {
     });
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    const cron = event.cron ?? '';
+
+    if (cron === '*/15 * * * *' || cron.includes('*/15')) {
+      ctx.waitUntil(
+        timed('cron', 'reminders', () => processDueReminders(env)).catch((err) => {
+          logService('error', 'cron', 'reminders_failed', { outcome: 'error', kind: errorKind(err) });
+        })
+      );
+      return;
+    }
+
     ctx.waitUntil(
-      timed('cron', 'scheduled_cleanup', () =>
-        cleanupProcessedUpdates(env, PROCESSED_UPDATES_RETENTION_DAYS)
-      ).catch((err) => {
+      timed('cron', 'scheduled_cleanup', async () => {
+        const cleaned = await cleanupProcessedUpdates(env, PROCESSED_UPDATES_RETENTION_DAYS);
+        const purged = await purgeOldTrash(env, TRASH_RETENTION_DAYS);
+        logService('info', 'cron', 'cleanup_done', { cleaned, purged, outcome: 'ok' });
+      }).catch((err) => {
         logService('error', 'cron', 'cleanup_failed', { outcome: 'error', kind: errorKind(err) });
       })
     );

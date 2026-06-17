@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS notes (
   text TEXT NOT NULL,
   tags TEXT DEFAULT '[]',
   done INTEGER DEFAULT 0,
+  deleted_at TIMESTAMP,
+  remind_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (folder_id) REFERENCES folders(id)
@@ -73,6 +75,13 @@ CREATE INDEX IF NOT EXISTS idx_notes_user_folder
 
 CREATE INDEX IF NOT EXISTS idx_notes_user_type
   ON notes(user_id, type);
+
+CREATE INDEX IF NOT EXISTS idx_notes_user_deleted_at
+  ON notes(user_id, deleted_at);
+
+CREATE INDEX IF NOT EXISTS idx_notes_remind_at
+  ON notes(remind_at)
+  WHERE remind_at IS NOT NULL AND deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_processed_updates_at
   ON processed_updates(processed_at);

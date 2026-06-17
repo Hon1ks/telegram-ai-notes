@@ -102,6 +102,17 @@ export function validateTags(value: unknown): string[] | null {
   return [...new Set(tags)];
 }
 
+export function validateRemindAt(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString().slice(0, 19).replace('T', ' ');
+}
+
 export async function readJsonBody<T>(request: Request): Promise<T | null> {
   try {
     return await request.json() as T;

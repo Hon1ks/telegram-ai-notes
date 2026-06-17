@@ -9,7 +9,7 @@
 
 ---
 
-## Прогресс (6 из 7 фаз)
+## Прогресс (7 из 7 фаз)
 
 | Фаза | Статус | Коммит | Тесты |
 |------|--------|--------|-------|
@@ -19,12 +19,12 @@
 | 4. Mini App UX | ✅ Готово | `bf6ab14` | build OK |
 | 5. UX Telegram-бота | ✅ Готово | `94823d7` | 48/48 |
 | 6. Ops / CI/CD | ✅ Готово | `7d1dcab` | 51/51 |
-| 7. Напоминания / экспорт / корзина | ⬜ Осталось | — | — |
+| 7. Напоминания / экспорт / корзина | ✅ Готово | (этот коммит) | 63/63 |
 
 **CI:** зелёный + ESLint в pipeline  
-**Production D1:** миграции `0002`, `0003` применены  
+**Production D1:** миграции `0002`, `0003` применены; **`0004` нужно применить** (`wrangler d1 migrations apply`)  
 **Deploy:** `.github/workflows/deploy.yml` (push → `main`, нужны secrets)  
-**Следующий шаг:** Фаза 7
+**Следующий шаг:** smoke/e2e из `SMOKE_TEST.md`, деплой
 
 ---
 
@@ -45,9 +45,9 @@
 - Бот: STT confirm, кнопки после сохранения, undo, inline перемещение
 - CI на GitHub Actions (notes-bot + miniapp build)
 
-**Осталось (фаза 7):**
-- Напоминания, экспорт JSON/MD, корзина (soft delete)
+**Осталось (после фазы 7):**
 - Финальный smoke/e2e из `SMOKE_TEST.md`
+- Применить миграцию `0004_phase7.sql` на production D1
 - Vitest для miniapp (отложен с Фазы 2)
 - Создать staging D1 + R2 bucket в Cloudflare (инструкции в `wrangler.jsonc`, `RESTORE.md`)
 
@@ -198,13 +198,13 @@ CREATE TABLE categories (
 
 ---
 
-## Фаза 7. Продуктовые фичи v1.0 ⬜ (P2–P3)
+## Фаза 7. Продуктовые фичи v1.0 ✅ (P2–P3)
 
 | Фича | Описание |
 |------|----------|
-| Напоминания | `remind_at` + cron → Telegram notification |
-| Экспорт | JSON + Markdown через API и Mini App |
-| Корзина | Soft delete `deleted_at`, восстановление 30 дней |
+| Напоминания ✅ | `remind_at` + cron `*/15 * * * *` → Telegram notification |
+| Экспорт ✅ | `GET /api/export?format=json\|md` + кнопка в Mini App |
+| Корзина ✅ | Soft delete `deleted_at`, restore, purge 30 дней |
 
 **v1.1:** еженедельная AI-сводка, reorder папок в UI, локализация EN.
 
@@ -226,7 +226,7 @@ CREATE TABLE categories (
 ✅ Фаза 4 (Mini App UX)          — готово
 ✅ Фаза 5 (бот UX)               — готово
 ✅ Фаза 6 (ops/CI)               — готово
-⬜ Фаза 7 (напоминания/экспорт)  — следующая
+✅ Фаза 7 (напоминания/экспорт)  — готово
 ⬜ Финальный smoke из SMOKE_TEST.md
 ```
 
@@ -243,8 +243,9 @@ CREATE TABLE categories (
 - [x] Бот: STT confirm, undo, inline move, кнопки после сохранения
 - [x] Бэкап D1 (R2 cron), staging config, structured logs
 - [ ] R2 bucket + staging D1 созданы в Cloudflare (ручной шаг)
-- [ ] Напоминания, экспорт, корзина
+- [x] Напоминания, экспорт, корзина
 - [ ] SMOKE_TEST.md пройден end-to-end
+- [ ] Миграция `0004` применена на production D1
 
 ---
 
@@ -261,4 +262,4 @@ CREATE TABLE categories (
 | 4 | Mini App: редактирование, пагинация, поиск, undo, dark theme | ✅ |
 | 5 | Бот: undo, кнопки, STT confirm, inline move | ✅ |
 | 6 | Metrics, backup, staging, lint, автодеплой | ✅ |
-| 7 | Напоминания, экспорт, корзина, smoke/e2e | ⬜ |
+| 7 | Напоминания, экспорт, корзина, smoke/e2e | ✅ (smoke — вручную) |

@@ -17,7 +17,7 @@
     }
   ],
   "triggers": {
-    "crons": ["0 3 * * *"]
+    "crons": ["0 3 * * *", "*/15 * * * *"]
   },
   // Опционально — rate limit + usage caps + STT session:
   //   npx wrangler kv namespace create RATE_LIMIT
@@ -45,7 +45,7 @@
         }
       ],
       "triggers": {
-        "crons": ["0 4 * * *"]
+        "crons": ["0 4 * * *", "*/15 * * * *"]
       }
     }
   }

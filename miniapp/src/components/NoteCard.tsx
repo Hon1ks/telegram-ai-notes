@@ -10,11 +10,13 @@ interface Props {
   onDelete: (id: number) => void;
   onEdit: (note: Note) => void;
   onTagClick?: (tag: string) => void;
+  trashMode?: boolean;
+  onRestore?: (id: number) => void;
 }
 
 const SWIPE_THRESHOLD = 72;
 
-export function NoteCard({ note, categoryMeta, onToggle, onDelete, onEdit, onTagClick }: Props) {
+export function NoteCard({ note, categoryMeta, onToggle, onDelete, onEdit, onTagClick, trashMode, onRestore }: Props) {
   const [offsetX, setOffsetX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef<number | null>(null);
@@ -35,70 +37,98 @@ export function NoteCard({ note, categoryMeta, onToggle, onDelete, onEdit, onTag
   }
 
   function onTouchEnd() {
-    if (offsetX < -SWIPE_THRESHOLD) onDelete(note.id);
+    if (!trashMode && offsetX < -SWIPE_THRESHOLD) onDelete(note.id);
     else setOffsetX(0);
     startX.current = null;
   }
 
   function handleTap() {
-    if (swiping) return;
+    if (swiping || trashMode) return;
     onEdit(note);
   }
 
-  const date = new Date(note.created_at).toLocaleDateString('ru-RU', {
+  const dateSource = trashMode && note.deleted_at ? note.deleted_at : note.created_at;
+  const date = new Date(dateSource).toLocaleDateString('ru-RU', {
     day: 'numeric', month: 'short',
   });
 
   return (
     <div className={s.wrap}>
-      <div className={s.deleteHint} style={{ opacity: Math.min(-offsetX / SWIPE_THRESHOLD, 1) }}>
-        <span>🗑</span>
-      </div>
+      {!trashMode && (
+        <div className={s.deleteHint} style={{ opacity: Math.min(-offsetX / SWIPE_THRESHOLD, 1) }}>
+          <span>🗑</span>
+        </div>
+      )}
 
       <div
         className={`${s.card} ${isDone ? s.done : ''}`}
         style={{
-          transform: `translateX(${offsetX}px)`,
+          transform: trashMode ? undefined : `translateX(${offsetX}px)`,
           transition: offsetX === 0 ? `transform ${swiping ? '0ms' : '200ms'} ease` : 'none',
         }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onTouchStart={trashMode ? undefined : onTouchStart}
+        onTouchMove={trashMode ? undefined : onTouchMove}
+        onTouchEnd={trashMode ? undefined : onTouchEnd}
       >
         <div className={s.accent} style={{ background: meta.color }} />
 
         <div className={s.body}>
           <div className={s.top}>
-            <button
-              type="button"
-              className={`${s.check} ${isDone ? s.checked : ''}`}
-              onClick={() => onToggle(note.id, isDone ? 0 : 1)}
-              aria-label={isDone ? 'Снять отметку' : 'Отметить выполненным'}
-            >
-              {isDone ? '✅' : <span className={s.circle} />}
-            </button>
+            {!trashMode && (
+              <button
+                type="button"
+                className={`${s.check} ${isDone ? s.checked : ''}`}
+                onClick={() => onToggle(note.id, isDone ? 0 : 1)}
+                aria-label={isDone ? 'Снять отметку' : 'Отметить выполненным'}
+              >
+                {isDone ? '✅' : <span className={s.circle} />}
+              </button>
+            )}
 
             <div
               className={s.content}
               onClick={handleTap}
               onKeyDown={e => { if (e.key === 'Enter') handleTap(); }}
-              role="button"
-              tabIndex={0}
-              aria-label="Редактировать заметку"
+              role={trashMode ? undefined : 'button'}
+              tabIndex={trashMode ? undefined : 0}
+              aria-label={trashMode ? undefined : 'Редактировать заметку'}
             >
               <span className={s.text}>{note.text}</span>
             </div>
 
-            <button
-              type="button"
-              className={s.del}
-              onClick={() => onDelete(note.id)}
-              aria-label="Удалить заметку"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M3 4h10M5.5 4V3a.5.5 0 01.5-.5h4a.5.5 0 01.5.5v1M6 7v4.5M8 7v4.5M10 7v4.5M4.5 4l.5 8.5a.5.5 0 00.5.5h5a.5.5 0 00.5-.5L11.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-            </button>
+            {trashMode ? (
+              <div className={s.trashActions}>
+                <button
+                  type="button"
+                  className={s.restoreBtn}
+                  onClick={() => onRestore?.(note.id)}
+                  aria-label="Восстановить заметку"
+                >
+                  ↩
+                </button>
+                <button
+                  type="button"
+                  className={s.del}
+                  onClick={() => onDelete(note.id)}
+                  aria-label="Удалить навсегда"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 4h10M5.5 4V3a.5.5 0 01.5-.5h4a.5.5 0 01.5.5v1M6 7v4.5M8 7v4.5M10 7v4.5M4.5 4l.5 8.5a.5.5 0 00.5.5h5a.5.5 0 00.5-.5L11.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={s.del}
+                onClick={() => onDelete(note.id)}
+                aria-label="Удалить заметку"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 4h10M5.5 4V3a.5.5 0 01.5-.5h4a.5.5 0 01.5.5v1M6 7v4.5M8 7v4.5M10 7v4.5M4.5 4l.5 8.5a.5.5 0 00.5.5h5a.5.5 0 00.5-.5L11.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
           </div>
 
           <div className={s.bottom}>
@@ -121,7 +151,7 @@ export function NoteCard({ note, categoryMeta, onToggle, onDelete, onEdit, onTag
                 </div>
               )}
             </div>
-            <span className={s.date}>{date}</span>
+            <span className={s.date}>{trashMode ? `Удалено ${date}` : date}</span>
           </div>
         </div>
       </div>

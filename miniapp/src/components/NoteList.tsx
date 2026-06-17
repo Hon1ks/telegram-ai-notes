@@ -16,6 +16,8 @@ interface Props {
   onTagClick?: (tag: string) => void;
   onLoadMore: () => void;
   onRefresh: () => Promise<void>;
+  trashMode?: boolean;
+  onRestore?: (id: number) => void;
 }
 
 const PULL_THRESHOLD = 64;
@@ -33,6 +35,8 @@ export function NoteList({
   onTagClick,
   onLoadMore,
   onRefresh,
+  trashMode,
+  onRestore,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const [pullY, setPullY] = useState(0);
@@ -90,12 +94,16 @@ export function NoteList({
     return (
       <div className={s.center}>
         <div className={s.empty}>
-          <span className={s.emptyIcon}>{searchMode ? '🔍' : '📭'}</span>
-          <p className={s.emptyTitle}>{searchMode ? 'Ничего не найдено' : 'Заметок пока нет'}</p>
+          <span className={s.emptyIcon}>{searchMode ? '🔍' : trashMode ? '🗑' : '📭'}</span>
+          <p className={s.emptyTitle}>
+            {searchMode ? 'Ничего не найдено' : trashMode ? 'Корзина пуста' : 'Заметок пока нет'}
+          </p>
           <p className={s.emptyHint}>
             {searchMode
               ? 'Попробуй другой запрос или смени фильтр'
-              : 'Отправь голосовое или текстовое сообщение боту — я классифицирую и сохраню'}
+              : trashMode
+                ? 'Удалённые заметки хранятся 30 дней'
+                : 'Отправь голосовое или текстовое сообщение боту — я классифицирую и сохраню'}
           </p>
         </div>
       </div>
@@ -127,6 +135,8 @@ export function NoteList({
           onDelete={onDelete}
           onEdit={onEdit}
           onTagClick={onTagClick}
+          trashMode={trashMode}
+          onRestore={onRestore}
         />
       ))}
 

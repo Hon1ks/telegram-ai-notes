@@ -22,6 +22,8 @@ export interface Note {
   text: string;
   tags: string;
   done: number;
+  deleted_at: string | null;
+  remind_at: string | null;
   created_at: string;
 }
 

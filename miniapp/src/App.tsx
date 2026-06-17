@@ -54,6 +54,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [trashMode, setTrashMode] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
 
@@ -63,18 +65,20 @@ export default function App() {
 
   const fetchNotesPage = useCallback(async (pageOffset: number) => {
     const data = await api.getNotes({
-      type: filter === 'all' ? undefined : filter,
-      tag: activeTag ?? undefined,
-      folderId: activeFolderId === null || activeFolderId === -1
+      type: trashMode || filter === 'all' ? undefined : filter,
+      tag: trashMode ? undefined : activeTag ?? undefined,
+      folderId: trashMode || activeFolderId === null || activeFolderId === -1
         ? undefined
         : activeFolderId,
       limit: PAGE_SIZE,
       offset: pageOffset,
+      trash: trashMode,
     });
+    if (trashMode) return data;
     return activeFolderId === -1
       ? data.filter(n => n.folder_id === null)
       : data;
-  }, [filter, activeTag, activeFolderId]);
+  }, [filter, activeTag, activeFolderId, trashMode]);
 
   const loadNotes = useCallback(async (reset = true) => {
     if (reset) {
@@ -133,9 +137,9 @@ export default function App() {
   useEffect(() => {
     if (!searching) {
       loadNotes(true);
-      loadTags();
+      if (!trashMode) loadTags();
     }
-  }, [filter, activeTag, activeFolderId, searching]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filter, activeTag, activeFolderId, searching, trashMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
   useEffect(() => { loadCategories(); }, [loadCategories]);
@@ -228,18 +232,13 @@ export default function App() {
       loadFolders();
       loadTags();
       setToast({
-        message: 'Заметка удалена',
+        message: 'Заметка в корзине',
         duration: 5000,
         action: {
           label: 'Отменить',
           onClick: async () => {
             try {
-              const restored = await api.createNote({
-                text: note.text,
-                type: note.type,
-                folder_id: note.folder_id,
-                tags: parseTags(note.tags),
-              });
+              const restored = await api.restoreNote(id);
               setNotes(n => [restored, ...n]);
               loadFolders();
               loadTags();
@@ -252,6 +251,45 @@ export default function App() {
     } catch (e) {
       setNotes(prev);
       showError(e instanceof Error ? e.message : 'Не удалось удалить заметку');
+    }
+  }
+
+  async function handleRestore(id: number) {
+    const prev = notes;
+    setNotes(n => n.filter(item => item.id !== id));
+    try {
+      await api.restoreNote(id);
+      loadFolders();
+      loadTags();
+      setToast({ message: 'Заметка восстановлена' });
+    } catch (e) {
+      setNotes(prev);
+      showError(e instanceof Error ? e.message : 'Не удалось восстановить');
+    }
+  }
+
+  async function handlePermanentDelete(id: number) {
+    const prev = notes;
+    setNotes(n => n.filter(item => item.id !== id));
+    try {
+      await api.permanentDeleteNote(id);
+      setToast({ message: 'Заметка удалена навсегда' });
+    } catch (e) {
+      setNotes(prev);
+      showError(e instanceof Error ? e.message : 'Не удалось удалить');
+    }
+  }
+
+  async function handleExport(format: 'json' | 'md') {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await api.exportNotes(format);
+      setToast({ message: format === 'md' ? 'Markdown экспортирован' : 'JSON экспортирован' });
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Не удалось экспортировать');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -324,6 +362,28 @@ export default function App() {
             </nav>
             <button
               type="button"
+              className={`${s.iconBtn} ${trashMode ? s.iconBtnActive : ''}`}
+              onClick={() => {
+                setTrashMode(v => !v);
+                setSearching(false);
+                setSearchQuery('');
+              }}
+              aria-label={trashMode ? 'Вернуться к заметкам' : 'Корзина'}
+              aria-pressed={trashMode}
+            >
+              🗑
+            </button>
+            <button
+              type="button"
+              className={s.iconBtn}
+              onClick={() => handleExport('json')}
+              disabled={exporting}
+              aria-label="Экспорт заметок"
+            >
+              ⬇
+            </button>
+            <button
+              type="button"
               className={s.searchBtn}
               onClick={openSearch}
               aria-label="Поиск заметок"
@@ -339,16 +399,30 @@ export default function App() {
 
       {tab === 'notes' && (
         <div className={s.notesView}>
-          <FilterBar
-            active={filter}
-            onChange={f => { setFilter(f); setActiveTag(null); }}
-            activeTag={activeTag}
-            tags={tags}
-            categories={categories}
-            onTagChange={t => { setActiveTag(t); setActiveFolderId(null); }}
-          />
+          {trashMode && (
+            <div className={s.trashBanner}>
+              <span>🗑 Корзина · хранение 30 дней</span>
+              <button
+                type="button"
+                className={s.bannerClose}
+                onClick={() => setTrashMode(false)}
+                aria-label="Вернуться к заметкам"
+              >✕</button>
+            </div>
+          )}
 
-          {folders.length > 0 && !searching && (
+          {!trashMode && (
+            <FilterBar
+              active={filter}
+              onChange={f => { setFilter(f); setActiveTag(null); }}
+              activeTag={activeTag}
+              tags={tags}
+              categories={categories}
+              onTagChange={t => { setActiveTag(t); setActiveFolderId(null); }}
+            />
+          )}
+
+          {folders.length > 0 && !searching && !trashMode && (
             <FolderStrip
               folders={folders}
               uncategorized={uncategorized}
@@ -403,22 +477,26 @@ export default function App() {
               searchMode={searching && !!searchQuery}
               categoryMeta={categoryMeta}
               onToggle={handleToggle}
-              onDelete={handleDelete}
+              onDelete={trashMode ? handlePermanentDelete : handleDelete}
               onEdit={setEditingNote}
               onTagClick={handleTagClick}
               onLoadMore={() => loadNotes(false)}
               onRefresh={refreshAll}
+              trashMode={trashMode}
+              onRestore={handleRestore}
             />
           )}
 
-          <button
-            type="button"
-            className={s.fab}
-            onClick={() => setComposerOpen(true)}
-            aria-label="Создать заметку"
-          >
-            +
-          </button>
+          {!trashMode && (
+            <button
+              type="button"
+              className={s.fab}
+              onClick={() => setComposerOpen(true)}
+              aria-label="Создать заметку"
+            >
+              +
+            </button>
+          )}
         </div>
       )}
 

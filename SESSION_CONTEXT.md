@@ -3,7 +3,7 @@
 > Этот файл сохраняет ключевые решения и историю обсуждения, чтобы при новом чате (после перезагрузки ПК) агент мог быстро войти в контекст.  
 > **Обновляй этот файл** после каждой значимой сессии работы над проектом.
 
-**Последнее обновление:** 17 июня 2026 (Фаза 6 выполнена)
+**Последнее обновление:** 17 июня 2026 (Фаза 7 выполнена — v1.0 feature-complete)
 
 ---
 
@@ -77,9 +77,9 @@
 
 ## Текущие открытые задачи
 
-См. чеклист в [PRODUCT_PLAN.md](./PRODUCT_PLAN.md). Следующий логичный шаг — **Фаза 7** (напоминания, экспорт, корзина, smoke/e2e).
+См. чеклист в [PRODUCT_PLAN.md](./PRODUCT_PLAN.md). Все 7 фаз кода готовы. Следующий шаг — **smoke/e2e** из `SMOKE_TEST.md` и production-деплой.
 
-**Перед production-деплоем:** применить миграции `0002_fts_backfill.sql` и `0003_categories.sql` на remote D1.
+**Перед production-деплоем:** применить миграцию `0004_phase7.sql` на remote D1 (`wrangler d1 migrations apply notes-bot-db`).
 
 ---
 
@@ -191,6 +191,18 @@
 **Ручные шаги в Cloudflare:** создать R2 `notes-bot-backups`, staging D1, secrets для deploy
 
 **Следующий шаг:** Фаза 7 — напоминания, экспорт, корзина
+
+### 17.06.2026 — Фаза 7: напоминания, экспорт, корзина
+
+**Сделано:**
+- Миграция `0004_phase7.sql`: `deleted_at`, `remind_at` на `notes`
+- Корзина: soft delete API, `?trash=1`, restore, permanent delete, purge 30 дней
+- Экспорт: `GET /api/export?format=json|md`
+- Напоминания: `remind_at` в API, cron `*/15 * * * *`, `ops/reminders.ts`
+- Mini App: корзина (🗑), экспорт (⬇), напоминание в `NoteEditor`
+- Тесты: `api-trash`, `api-export`, `api-reminders`, `trash-queries` — **63/63**
+
+**Следующий шаг:** smoke/e2e, `wrangler d1 migrations apply`, деплой
 
 ### [Дата] — [Тема сессии]
 
