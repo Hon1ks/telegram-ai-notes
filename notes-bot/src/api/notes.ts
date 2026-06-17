@@ -5,13 +5,14 @@ import {
   searchNotes, getUserTags, getFolderById,
 } from '../db/queries';
 import {
-  isNoteType,
   parsePositiveInt,
   readJsonBody,
   validateFolderId,
   validateNoteText,
   validateTags,
+  validateUserCategorySlug,
 } from './validation';
+import { DEFAULT_CATEGORY_SLUG } from '../categories/defaults';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -51,7 +52,9 @@ export async function handleNotesApi(
     const limit = Math.min(limitRaw ?? DEFAULT_LIMIT, MAX_LIMIT);
     const offset = Number.isSafeInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
 
-    if (type !== undefined && !isNoteType(type)) return errorResponse('invalid type', 400, request, env, headers);
+    if (type !== undefined && !(await validateUserCategorySlug(env, user.id, type))) {
+      return errorResponse('invalid type', 400, request, env, headers);
+    }
     if (folderIdStr !== null && folderId === undefined) {
       return errorResponse('invalid folder_id', 400, request, env, headers);
     }
@@ -70,12 +73,14 @@ export async function handleNotesApi(
     if (!body) return errorResponse('invalid JSON', 400, request, env, headers);
 
     const text = validateNoteText(body.text);
-    const type = body.type ?? 'notes';
+    const type = body.type ?? DEFAULT_CATEGORY_SLUG;
     const folderId = validateFolderId(body.folder_id ?? null);
     const tags = validateTags(body.tags);
 
     if (!text) return errorResponse('text is required and must be at most 10000 characters', 400, request, env, headers);
-    if (!isNoteType(type)) return errorResponse('invalid type', 400, request, env, headers);
+    if (!(await validateUserCategorySlug(env, user.id, type))) {
+      return errorResponse('invalid type', 400, request, env, headers);
+    }
     if (folderId === undefined) return errorResponse('invalid folder_id', 400, request, env, headers);
     if (tags === null) return errorResponse('invalid tags', 400, request, env, headers);
     if (folderId !== null && !(await getFolderById(env, folderId, user.id))) {
@@ -141,8 +146,9 @@ export async function handleNotesApi(
       fields.tags = tags;
     }
     if ('type' in body) {
-      if (!body.type || !isNoteType(body.type)) return errorResponse('invalid type', 400, request, env, headers);
-      fields.type = body.type;
+      const type = await validateUserCategorySlug(env, user.id, body.type);
+      if (!type) return errorResponse('invalid type', 400, request, env, headers);
+      fields.type = type;
     }
 
     await updateNote(env, noteId, user.id, fields);

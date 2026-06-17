@@ -1,24 +1,24 @@
-import { useState } from 'react';
-import type { NoteType } from '../types';
+import { useEffect, useState } from 'react';
+import type { Category, NoteType } from '../types';
 import s from './NoteComposer.module.css';
 
 interface Props {
   open: boolean;
+  categories: Category[];
   onClose: () => void;
   onSubmit: (text: string, type: NoteType) => Promise<void>;
 }
 
-const TYPES: Array<{ id: NoteType; label: string }> = [
-  { id: 'notes', label: '📝 Заметка' },
-  { id: 'tasks', label: '✅ Задача' },
-  { id: 'ideas', label: '💡 Идея' },
-  { id: 'shopping', label: '🛒 Покупка' },
-];
-
-export function NoteComposer({ open, onClose, onSubmit }: Props) {
+export function NoteComposer({ open, categories, onClose, onSubmit }: Props) {
   const [text, setText] = useState('');
   const [type, setType] = useState<NoteType>('notes');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && categories.length > 0 && !categories.some((c) => c.slug === type)) {
+      setType(categories[0]?.slug ?? 'notes');
+    }
+  }, [open, categories, type]);
 
   if (!open) return null;
 
@@ -29,7 +29,7 @@ export function NoteComposer({ open, onClose, onSubmit }: Props) {
     try {
       await onSubmit(value, type);
       setText('');
-      setType('notes');
+      setType(categories[0]?.slug ?? 'notes');
       onClose();
     } finally {
       setSaving(false);
@@ -41,13 +41,13 @@ export function NoteComposer({ open, onClose, onSubmit }: Props) {
       <div className={s.sheet} onClick={e => e.stopPropagation()}>
         <h2 className={s.title}>Новая заметка</h2>
         <div className={s.types}>
-          {TYPES.map(item => (
+          {categories.map((category) => (
             <button
-              key={item.id}
-              className={`${s.typeBtn} ${type === item.id ? s.typeActive : ''}`}
-              onClick={() => setType(item.id)}
+              key={category.slug}
+              className={`${s.typeBtn} ${type === category.slug ? s.typeActive : ''}`}
+              onClick={() => setType(category.slug)}
             >
-              {item.label}
+              {category.emoji} {category.name}
             </button>
           ))}
         </div>

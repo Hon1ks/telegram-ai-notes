@@ -1,4 +1,18 @@
-export type NoteType = 'tasks' | 'ideas' | 'shopping' | 'notes';
+export type NoteType = string;
+
+export interface Category {
+  id: number;
+  user_id: number;
+  slug: string;
+  name: string;
+  emoji: string;
+  color: string;
+  llm_hint: string | null;
+  is_system: number;
+  sort_order: number;
+  note_count?: number;
+  created_at: string;
+}
 
 export interface Note {
   id: number;
@@ -6,7 +20,7 @@ export interface Note {
   folder_id: number | null;
   type: NoteType;
   text: string;
-  tags: string; // JSON string: '["#работа","#личное"]'
+  tags: string;
   done: number;
   created_at: string;
 }
@@ -15,6 +29,7 @@ export interface Folder {
   id: number;
   user_id: number;
   name: string;
+  category?: string | null;
   sort_order: number;
   note_count: number;
   created_at: string;
@@ -25,15 +40,26 @@ export interface FoldersResponse {
   uncategorized: number;
 }
 
-export type FilterType = 'all' | NoteType;
+export type FilterType = 'all' | string;
 
 export function parseTags(raw: string): string[] {
   try { return JSON.parse(raw) as string[]; } catch { return []; }
 }
 
-export const TYPE_META: Record<NoteType, { label: string; emoji: string; color: string }> = {
-  tasks:    { label: 'Задачи',   emoji: '✅', color: '#3b82f6' },
-  ideas:    { label: 'Идеи',     emoji: '💡', color: '#f59e0b' },
-  shopping: { label: 'Покупки',  emoji: '🛒', color: '#22c55e' },
-  notes:    { label: 'Заметки',  emoji: '📝', color: '#8b5cf6' },
+export function buildCategoryMeta(categories: Category[]): Record<string, { label: string; emoji: string; color: string }> {
+  const meta: Record<string, { label: string; emoji: string; color: string }> = {};
+  for (const category of categories) {
+    meta[category.slug] = {
+      label: category.name,
+      emoji: category.emoji,
+      color: category.color,
+    };
+  }
+  return meta;
+}
+
+export const FALLBACK_CATEGORY_META = {
+  label: 'Заметки',
+  emoji: '📝',
+  color: '#8b5cf6',
 };

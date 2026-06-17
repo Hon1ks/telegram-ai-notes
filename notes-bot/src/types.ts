@@ -57,13 +57,27 @@ export interface TelegramVoice {
 
 // ─── Notes / LLM Types ───────────────────────────────────────────────────────
 
-export type NoteType = 'tasks' | 'ideas' | 'shopping' | 'notes';
+export type NoteType = string;
 
 export interface NoteItem {
   text: string;
-  type: NoteType;
+  type: string;
   category: string;
   tags: string[];
+}
+
+export interface DbCategory {
+  id: number;
+  user_id: number;
+  slug: string;
+  name: string;
+  emoji: string;
+  color: string;
+  llm_hint: string | null;
+  is_system: number;
+  sort_order: number;
+  note_count?: number;
+  created_at: string;
 }
 
 // ─── DB Types ────────────────────────────────────────────────────────────────

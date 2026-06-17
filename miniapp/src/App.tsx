@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Note, Folder, FilterType, NoteType } from './types';
+import type { Note, Folder, Category, FilterType, NoteType } from './types';
+import { buildCategoryMeta } from './types';
 import * as api from './api/client';
 import { FilterBar } from './components/FilterBar';
 import { FolderStrip } from './components/FolderStrip';
 import { NoteList } from './components/NoteList';
 import { FolderManager } from './components/FolderManager';
+import { CategoryManager } from './components/CategoryManager';
 import { SearchBar } from './components/SearchBar';
 import { Toast } from './components/Toast';
 import { NoteComposer } from './components/NoteComposer';
 import s from './App.module.css';
 
 type Tab = 'notes' | 'folders';
+type OrganizeView = 'folders' | 'categories';
 
 export default function App() {
   const [tab, setTab]               = useState<Tab>('notes');
@@ -20,6 +23,8 @@ export default function App() {
   const [foldersVisible, setFoldersVisible] = useState(false);
   const [notes, setNotes]           = useState<Note[]>([]);
   const [folders, setFolders]       = useState<Folder[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [organizeView, setOrganizeView] = useState<OrganizeView>('folders');
   const [uncategorized, setUncategorized] = useState(0);
   const [tags, setTags]             = useState<string[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -67,6 +72,14 @@ export default function App() {
     }
   }, [showError]);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategories(await api.getCategories());
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Ошибка загрузки категорий');
+    }
+  }, [showError]);
+
   const loadTags = useCallback(async () => {
     try {
       setTags(await api.getTags());
@@ -83,10 +96,13 @@ export default function App() {
   }, [loadNotes, loadTags, searching]);
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
+  useEffect(() => { loadCategories(); }, [loadCategories]);
 
   async function refreshAll() {
-    await Promise.all([loadNotes(), loadFolders(), loadTags()]);
+    await Promise.all([loadNotes(), loadFolders(), loadTags(), loadCategories()]);
   }
+
+  const categoryMeta = buildCategoryMeta(categories);
 
   function handleSearchChange(q: string) {
     setSearchQuery(q);
@@ -231,6 +247,7 @@ export default function App() {
                 onChange={f => { setFilter(f); setActiveTag(null); }}
                 activeTag={activeTag}
                 tags={tags}
+                categories={categories}
                 onTagChange={t => { setActiveTag(t); setActiveFolderId(null); }}
               />
 
@@ -271,6 +288,7 @@ export default function App() {
               notes={notes}
               loading={loading}
               searchMode={searching && !!searchQuery}
+              categoryMeta={categoryMeta}
               onToggle={handleToggle}
               onDelete={handleDelete}
               onEdit={handleEdit}
@@ -290,12 +308,31 @@ export default function App() {
 
       {tab === 'folders' && (
         <div className={s.foldersView}>
-          <FolderManager folders={folders} onUpdate={loadFolders} />
+          <div className={s.organizeTabs}>
+            <button
+              className={`${s.organizeTab} ${organizeView === 'folders' ? s.organizeTabActive : ''}`}
+              onClick={() => setOrganizeView('folders')}
+            >
+              Папки
+            </button>
+            <button
+              className={`${s.organizeTab} ${organizeView === 'categories' ? s.organizeTabActive : ''}`}
+              onClick={() => setOrganizeView('categories')}
+            >
+              Категории
+            </button>
+          </div>
+          {organizeView === 'folders' ? (
+            <FolderManager folders={folders} onUpdate={loadFolders} />
+          ) : (
+            <CategoryManager categories={categories} onUpdate={loadCategories} />
+          )}
         </div>
       )}
 
       <NoteComposer
         open={composerOpen}
+        categories={categories}
         onClose={() => setComposerOpen(false)}
         onSubmit={handleCreate}
       />

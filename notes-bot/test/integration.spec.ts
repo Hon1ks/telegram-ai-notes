@@ -23,7 +23,9 @@ describe('AI pipeline integration', () => {
   it('falls back to a raw note when LLM returns invalid JSON twice', async () => {
     mockOpenRouterResponse('not-json', 2);
 
-    const items = await parseNotes(createTestEnv(), 'Купить молоко #дом');
+    const testEnv = createTestEnv();
+    const user = await getOrCreateUser(testEnv, 5101);
+    const items = await parseNotes(testEnv, user.id, 'Купить молоко #дом');
     expect(items).toEqual([
       {
         text: 'Купить молоко #дом',
@@ -42,7 +44,9 @@ describe('AI pipeline integration', () => {
       ],
     }));
 
-    const items = await parseNotes(createTestEnv(), 'Купить молоко и позвонить врачу');
+    const testEnv = createTestEnv();
+    const user = await getOrCreateUser(testEnv, 5102);
+    const items = await parseNotes(testEnv, user.id, 'Купить молоко и позвонить врачу');
     expect(items).toHaveLength(2);
     expect(items[0]?.type).toBe('shopping');
     expect(items[1]?.type).toBe('tasks');

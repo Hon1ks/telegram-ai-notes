@@ -1,4 +1,9 @@
-import type { Env, DbUser, DbFolder, DbNote } from '../types';
+import type { Env, DbUser, DbFolder, DbNote, DbCategory } from '../types';
+import {
+  DEFAULT_CATEGORY_SLUG,
+  MAX_CATEGORIES_PER_USER,
+  SYSTEM_CATEGORIES,
+} from '../categories/defaults';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -8,7 +13,10 @@ export async function getOrCreateUser(env: Env, telegramId: number): Promise<DbU
     .bind(String(telegramId))
     .first<DbUser>();
 
-  if (existing) return existing;
+  if (existing) {
+    await ensureDefaultCategories(env, existing.id);
+    return existing;
+  }
 
   await env.NOTES_DB
     .prepare('INSERT INTO users (telegram_id, state) VALUES (?, ?)')
@@ -20,6 +28,7 @@ export async function getOrCreateUser(env: Env, telegramId: number): Promise<DbU
     .bind(String(telegramId))
     .first<DbUser>();
 
+  await ensureDefaultCategories(env, created!.id);
   return created!;
 }
 
@@ -35,6 +44,181 @@ export async function updateUserState(env: Env, userId: number, state: string): 
     .prepare('UPDATE users SET state = ? WHERE id = ?')
     .bind(state, userId)
     .run();
+}
+
+// ─── Categories ──────────────────────────────────────────────────────────────
+
+export async function ensureDefaultCategories(env: Env, userId: number): Promise<void> {
+  const count = await env.NOTES_DB
+    .prepare('SELECT COUNT(*) as cnt FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .first<{ cnt: number }>();
+
+  if ((count?.cnt ?? 0) > 0) return;
+
+  const stmts = SYSTEM_CATEGORIES.map((category) =>
+    env.NOTES_DB
+      .prepare(
+        `INSERT INTO categories (user_id, slug, name, emoji, color, llm_hint, is_system, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)`
+      )
+      .bind(
+        userId,
+        category.slug,
+        category.name,
+        category.emoji,
+        category.color,
+        category.llm_hint,
+        category.sort_order
+      )
+  );
+
+  await env.NOTES_DB.batch(stmts);
+}
+
+export async function getCategoriesByUserId(env: Env, userId: number): Promise<DbCategory[]> {
+  await ensureDefaultCategories(env, userId);
+
+  const result = await env.NOTES_DB
+    .prepare(`
+      SELECT c.*, COUNT(n.id) as note_count
+      FROM categories c
+      LEFT JOIN notes n ON n.user_id = c.user_id AND n.type = c.slug
+      WHERE c.user_id = ?
+      GROUP BY c.id
+      ORDER BY c.sort_order ASC, c.id ASC
+    `)
+    .bind(userId)
+    .all<DbCategory>();
+
+  return result.results;
+}
+
+export async function getCategoryById(
+  env: Env,
+  categoryId: number,
+  userId: number
+): Promise<DbCategory | null> {
+  return env.NOTES_DB
+    .prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?')
+    .bind(categoryId, userId)
+    .first<DbCategory>();
+}
+
+export async function getCategoryBySlug(
+  env: Env,
+  userId: number,
+  slug: string
+): Promise<DbCategory | null> {
+  await ensureDefaultCategories(env, userId);
+  return env.NOTES_DB
+    .prepare('SELECT * FROM categories WHERE user_id = ? AND slug = ?')
+    .bind(userId, slug)
+    .first<DbCategory>();
+}
+
+export async function categorySlugExists(
+  env: Env,
+  userId: number,
+  slug: string
+): Promise<boolean> {
+  const category = await getCategoryBySlug(env, userId, slug);
+  return category !== null;
+}
+
+export async function createCategory(
+  env: Env,
+  userId: number,
+  data: {
+    slug: string;
+    name: string;
+    emoji: string;
+    color: string;
+    llm_hint?: string | null;
+  }
+): Promise<DbCategory> {
+  const count = await env.NOTES_DB
+    .prepare('SELECT COUNT(*) as cnt FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .first<{ cnt: number }>();
+
+  if ((count?.cnt ?? 0) >= MAX_CATEGORIES_PER_USER) {
+    throw new Error('category limit reached');
+  }
+
+  const maxOrder = await env.NOTES_DB
+    .prepare('SELECT COALESCE(MAX(sort_order), -1) as max_order FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .first<{ max_order: number }>();
+
+  await env.NOTES_DB
+    .prepare(
+      `INSERT INTO categories (user_id, slug, name, emoji, color, llm_hint, is_system, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
+    )
+    .bind(
+      userId,
+      data.slug,
+      data.name,
+      data.emoji,
+      data.color,
+      data.llm_hint ?? null,
+      (maxOrder?.max_order ?? -1) + 1
+    )
+    .run();
+
+  return (await getCategoryBySlug(env, userId, data.slug))!;
+}
+
+export async function updateCategory(
+  env: Env,
+  categoryId: number,
+  userId: number,
+  fields: {
+    name?: string;
+    emoji?: string;
+    color?: string;
+    llm_hint?: string | null;
+  }
+): Promise<void> {
+  const sets: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  if (fields.name !== undefined) { sets.push('name = ?'); params.push(fields.name); }
+  if (fields.emoji !== undefined) { sets.push('emoji = ?'); params.push(fields.emoji); }
+  if (fields.color !== undefined) { sets.push('color = ?'); params.push(fields.color); }
+  if ('llm_hint' in fields) { sets.push('llm_hint = ?'); params.push(fields.llm_hint ?? null); }
+
+  if (sets.length === 0) return;
+
+  params.push(categoryId, userId);
+  await env.NOTES_DB
+    .prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`)
+    .bind(...params)
+    .run();
+}
+
+export async function deleteCategory(
+  env: Env,
+  categoryId: number,
+  userId: number
+): Promise<void> {
+  const category = await getCategoryById(env, categoryId, userId);
+  if (!category || category.is_system === 1) {
+    throw new Error('cannot delete system category');
+  }
+
+  await env.NOTES_DB.batch([
+    env.NOTES_DB
+      .prepare('UPDATE notes SET type = ? WHERE user_id = ? AND type = ?')
+      .bind(DEFAULT_CATEGORY_SLUG, userId, category.slug),
+    env.NOTES_DB
+      .prepare('UPDATE folders SET category = NULL WHERE user_id = ? AND category = ?')
+      .bind(userId, category.slug),
+    env.NOTES_DB
+      .prepare('DELETE FROM categories WHERE id = ? AND user_id = ?')
+      .bind(categoryId, userId),
+  ]);
 }
 
 // ─── Folders ─────────────────────────────────────────────────────────────────

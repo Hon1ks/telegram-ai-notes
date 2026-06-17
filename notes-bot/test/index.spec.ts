@@ -173,7 +173,8 @@ describe('text helpers', () => {
       ],
     });
 
-    expect(parseLlmResponse(raw, 'fallback', ['#дом'])).toEqual([
+    const allowed = new Set(['tasks', 'ideas', 'shopping', 'notes']);
+    expect(parseLlmResponse(raw, 'fallback', ['#дом'], allowed)).toEqual([
       {
         text: 'Купить молоко',
         type: 'shopping',
@@ -195,7 +196,7 @@ describe('text helpers', () => {
       type: 'notes',
     }));
     const raw = JSON.stringify({ items });
-    expect(parseLlmResponse(raw, 'fallback', [])).toHaveLength(MAX_NOTE_ITEMS);
+    expect(parseLlmResponse(raw, 'fallback', [], new Set(['notes']))).toHaveLength(MAX_NOTE_ITEMS);
   });
 });
 

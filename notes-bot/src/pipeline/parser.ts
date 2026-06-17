@@ -1,30 +1,27 @@
-import type { Env, NoteItem, NoteType } from '../types';
+import type { Env, NoteItem } from '../types';
 import { processNotes, retryProcessNotes } from './llm';
+import { getCategoriesByUserId } from '../db/queries';
+import { DEFAULT_CATEGORY_SLUG } from '../categories/defaults';
 
 export const MAX_NOTE_ITEMS = 10;
 
-/**
- * Extracts #hashtags from raw text using regex.
- */
 export function extractTags(text: string): string[] {
   const matches = text.match(/#[\wа-яёА-ЯЁ]+/gu) ?? [];
-  return [...new Set(matches.map(t => t.toLowerCase()))];
+  return [...new Set(matches.map((tag) => tag.toLowerCase()))];
 }
 
-/**
- * Parses LLM output into NoteItem[].
- * Implements retry on invalid JSON, then fallback.
- */
-export async function parseNotes(env: Env, text: string): Promise<NoteItem[]> {
+export async function parseNotes(env: Env, userId: number, text: string): Promise<NoteItem[]> {
+  const categories = await getCategoriesByUserId(env, userId);
+  const allowedSlugs = new Set(categories.map((category) => category.slug));
   const extractedTags = extractTags(text);
 
   try {
-    const raw = await processNotes(env, text);
-    return parseLlmResponse(raw, text, extractedTags);
+    const raw = await processNotes(env, text, categories);
+    return parseLlmResponse(raw, text, extractedTags, allowedSlugs);
   } catch {
     try {
-      const raw2 = await retryProcessNotes(env, text);
-      return parseLlmResponse(raw2, text, extractedTags);
+      const raw2 = await retryProcessNotes(env, text, categories);
+      return parseLlmResponse(raw2, text, extractedTags, allowedSlugs);
     } catch {
       return fallback(text, extractedTags);
     }
@@ -34,7 +31,8 @@ export async function parseNotes(env: Env, text: string): Promise<NoteItem[]> {
 export function parseLlmResponse(
   raw: string,
   originalText: string,
-  globalTags: string[]
+  globalTags: string[],
+  allowedSlugs: Set<string>
 ): NoteItem[] {
   let parsed: { items?: unknown };
 
@@ -52,20 +50,17 @@ export function parseLlmResponse(
     .slice(0, MAX_NOTE_ITEMS)
     .map((item) => {
       const itemText = typeof item.text === 'string' ? item.text.trim() : originalText;
-      const type = isValidType(item.type) ? item.type : 'notes';
+      const rawType = typeof item.type === 'string' ? item.type.trim().toLowerCase() : DEFAULT_CATEGORY_SLUG;
+      const type = allowedSlugs.has(rawType) ? rawType : DEFAULT_CATEGORY_SLUG;
       const category = typeof item.category === 'string' ? item.category : type;
       const itemTags = Array.isArray(item.tags)
-        ? (item.tags as string[]).filter(t => typeof t === 'string')
+        ? (item.tags as string[]).filter((tag) => typeof tag === 'string')
         : [];
       const tags = [...new Set([...globalTags, ...itemTags])];
       return { text: itemText, type, category, tags };
     });
 }
 
-function isValidType(v: unknown): v is NoteType {
-  return v === 'tasks' || v === 'ideas' || v === 'shopping' || v === 'notes';
-}
-
 function fallback(text: string, tags: string[]): NoteItem[] {
-  return [{ text, type: 'notes', category: 'notes', tags }];
+  return [{ text, type: DEFAULT_CATEGORY_SLUG, category: DEFAULT_CATEGORY_SLUG, tags }];
 }

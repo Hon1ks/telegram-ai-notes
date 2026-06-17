@@ -9,7 +9,7 @@ import {
   reorderFolders,
   getUncategorizedCount,
 } from '../db/queries';
-import { isNoteType, parsePositiveInt, readJsonBody } from './validation';
+import { parsePositiveInt, readJsonBody, validateUserCategorySlug } from './validation';
 
 export async function handleFoldersApi(
   env: Env,
@@ -33,8 +33,9 @@ export async function handleFoldersApi(
     const body = await readJsonBody<{ name?: string; category?: string | null }>(request);
     if (!body) return errorResponse('invalid JSON', 400, request, env, headers);
     if (!body.name?.trim()) return errorResponse('name is required', 400, request, env, headers);
-    if (body.category !== undefined && body.category !== null && !isNoteType(body.category)) {
-      return errorResponse('invalid category', 400, request, env, headers);
+    if (body.category !== undefined && body.category !== null) {
+      const category = await validateUserCategorySlug(env, user.id, body.category);
+      if (!category) return errorResponse('invalid category', 400, request, env, headers);
     }
 
     const folder = await createFolder(
@@ -81,8 +82,9 @@ export async function handleFoldersApi(
     const body = await readJsonBody<{ name?: string; category?: string | null }>(request);
     if (!body) return errorResponse('invalid JSON', 400, request, env, headers);
     if (!body.name?.trim()) return errorResponse('name is required', 400, request, env, headers);
-    if (body.category !== undefined && body.category !== null && !isNoteType(body.category)) {
-      return errorResponse('invalid category', 400, request, env, headers);
+    if (body.category !== undefined && body.category !== null) {
+      const category = await validateUserCategorySlug(env, user.id, body.category);
+      if (!category) return errorResponse('invalid category', 400, request, env, headers);
     }
 
     const folder = await getFolderById(env, folderId, user.id);

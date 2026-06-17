@@ -2,6 +2,7 @@ import type { Env, TelegramUpdate } from './types';
 import { handleMessage, handleCallbackQuery } from './bot/handlers';
 import { handleNotesApi } from './api/notes';
 import { handleFoldersApi } from './api/folders';
+import { handleCategoriesApi } from './api/categories';
 import { corsHeaders, errorResponse } from './api/auth';
 import { sendMessage } from './bot/telegram';
 import { claimUpdateId, cleanupProcessedUpdates } from './db/queries';
@@ -78,6 +79,10 @@ export default {
 
         if (path === '/api/folders' || path.startsWith('/api/folders/')) {
           return await handleFoldersApi(env, request, path, requestId);
+        }
+
+        if (path === '/api/categories' || path.startsWith('/api/categories/')) {
+          return await handleCategoriesApi(env, request, path, requestId);
         }
 
         return errorResponse('Not found', 404, request, env, { 'X-Request-Id': requestId });

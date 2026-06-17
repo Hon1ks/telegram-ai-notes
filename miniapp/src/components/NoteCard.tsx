@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
 import type { Note } from '../types';
-import { parseTags, TYPE_META } from '../types';
+import { parseTags, FALLBACK_CATEGORY_META } from '../types';
 import s from './NoteCard.module.css';
 
 interface Props {
   note: Note;
+  categoryMeta: Record<string, { label: string; emoji: string; color: string }>;
   onToggle: (id: number, done: number) => void;
   onDelete: (id: number) => void;
   onEdit: (id: number, text: string) => void;
@@ -13,14 +14,14 @@ interface Props {
 
 const SWIPE_THRESHOLD = 72;
 
-export function NoteCard({ note, onToggle, onDelete, onEdit, onTagClick }: Props) {
+export function NoteCard({ note, categoryMeta, onToggle, onDelete, onEdit, onTagClick }: Props) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(note.text);
   const [offsetX, setOffsetX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef<number | null>(null);
   const tags = parseTags(note.tags);
-  const meta = TYPE_META[note.type as keyof typeof TYPE_META] ?? TYPE_META.notes;
+  const meta = categoryMeta[note.type] ?? FALLBACK_CATEGORY_META;
   const isDone = note.done === 1;
 
   // ── Swipe ──

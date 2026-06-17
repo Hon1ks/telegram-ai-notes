@@ -1,4 +1,4 @@
-import type { Env } from '../types';
+import type { Env, DbCategory } from '../types';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'stepfun/step-3.5-flash:free';
@@ -34,10 +34,6 @@ async function fetchWithTimeout(
   }
 }
 
-/**
- * Base LLM call via OpenRouter.
- * Returns raw string content from the model.
- */
 export async function callLLM(env: Env, prompt: string): Promise<string> {
   let lastError: unknown;
 
@@ -89,9 +85,6 @@ export async function callLLM(env: Env, prompt: string): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error('LLM request failed');
 }
 
-/**
- * Extracts JSON from model response (strips markdown code blocks if present).
- */
 function extractJson(raw: string): string {
   const trimmed = raw.trim();
   const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -99,19 +92,33 @@ function extractJson(raw: string): string {
   return trimmed;
 }
 
-/**
- * Processes text through LLM: splits into semantic parts and classifies each.
- * Returns raw JSON string with { items: NoteItem[] }.
- */
-export async function processNotes(env: Env, text: string): Promise<string> {
+export function buildCategoryPromptSection(categories: DbCategory[]): string {
+  return categories
+    .map((category) => {
+      const hint = category.llm_hint?.trim() || category.name;
+      return `- ${category.slug} (${category.name}): ${hint}`;
+    })
+    .join('\n');
+}
+
+function buildAllowedSlugs(categories: DbCategory[]): string {
+  return categories.map((category) => category.slug).join('|');
+}
+
+export async function processNotes(
+  env: Env,
+  text: string,
+  categories: DbCategory[]
+): Promise<string> {
+  const categorySection = buildCategoryPromptSection(categories);
+  const allowedSlugs = buildAllowedSlugs(categories);
+
   const prompt = `Ты — ассистент для обработки заметок. Раздели текст на отдельные смысловые части и классифицируй каждую.
 
-Категории:
-- tasks — задачи, дела, что нужно сделать
-- ideas — идеи, мысли, планы
-- shopping — покупки, что купить
-- notes — всё остальное
+Категории пользователя:
+${categorySection}
 
+Используй только slug из списка выше в поле type.
 Не меняй смысл и формулировки заметок. Верни не больше 10 элементов.
 Верни СТРОГО валидный JSON без текста вне JSON:
 {"items":[{"text":"текст заметки","type":"tasks","category":"задачи"}]}
@@ -121,15 +128,19 @@ export async function processNotes(env: Env, text: string): Promise<string> {
   return callLLM(env, prompt);
 }
 
-/**
- * Retry call with a correction prompt after invalid JSON.
- */
-export async function retryProcessNotes(env: Env, text: string): Promise<string> {
+export async function retryProcessNotes(
+  env: Env,
+  text: string,
+  categories: DbCategory[]
+): Promise<string> {
+  const allowedSlugs = buildAllowedSlugs(categories);
+
   const prompt = `Ты вернул невалидный JSON. Исправь формат.
 
 Раздели текст на части, классифицируй каждую. Не меняй смысл заметок. Верни не больше 10 элементов.
+Поле type должно быть одним из slug: ${allowedSlugs}
 Верни ТОЛЬКО валидный JSON:
-{"items":[{"text":"...","type":"tasks|ideas|shopping|notes","category":"..."}]}
+{"items":[{"text":"...","type":"tasks","category":"..."}]}
 
 Текст: ${text}`;
 

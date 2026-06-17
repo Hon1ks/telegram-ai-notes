@@ -220,8 +220,8 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 
 ## Definition of Done
 
-- [ ] Пользователь создаёт, редактирует и удаляет свои категории; AI классифицирует по ним
-- [ ] 4 системные категории по умолчанию, можно переименовать
+- [x] Пользователь создаёт, редактирует и удаляет свои категории; AI классифицирует по ним
+- [x] 4 системные категории по умолчанию, можно переименовать
 - [ ] Заметка не теряется при сбое AI
 - [ ] Webhook < 1 сек; FTS синхронен с данными
 - [ ] API + категории покрыты тестами; CI зелёный
@@ -236,10 +236,10 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 
 - [x] Фаза 1: Async webhook, LLM fallback, FTS batch, KV rate limit (memory/KV), cleanup
 - [x] Фаза 2: API/integration тесты backend (miniapp tests — в Фазе 4)
-- [ ] Фаза 3a: Таблица categories, миграция, seed
-- [ ] Фаза 3b: CRUD /api/categories
-- [ ] Фаза 3c: Динамический LLM prompt и parser
-- [ ] Фаза 3d: CategoryManager, динамический UI
+- [x] Фаза 3a: Таблица categories, миграция, seed
+- [x] Фаза 3b: CRUD /api/categories
+- [x] Фаза 3c: Динамический LLM prompt и parser
+- [x] Фаза 3d: CategoryManager, динамический UI
 - [ ] Фаза 4: Редактирование, пагинация, поиск+фильтры, undo, dark theme
 - [ ] Фаза 5: Undo бота, кнопки, STT confirm, inline actions
 - [ ] Фаза 6: Metrics, backup, staging, lint, автодеплой

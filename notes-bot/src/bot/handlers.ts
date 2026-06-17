@@ -1,22 +1,15 @@
-import type { Env, TelegramMessage, TelegramCallbackQuery, NoteItem, NoteType } from '../types';
+import type { Env, TelegramMessage, TelegramCallbackQuery, NoteItem, DbCategory } from '../types';
 import { sendMessage, sendChatAction, setChatMenuButton } from './telegram';
 import { handleStart, handleOnboardingCallback, handleOnboardingFolderInput } from './onboarding';
 import { cheapGuard, llmGuard } from '../pipeline/guard';
 import { transcribeVoice } from '../pipeline/stt';
 import { parseNotes, extractTags } from '../pipeline/parser';
-import { getOrCreateUser, createNote, getFoldersByUserId } from '../db/queries';
+import { getOrCreateUser, createNote, getFoldersByUserId, getCategoriesByUserId } from '../db/queries';
 import { escapeHtml } from './html';
-import { isNoteType } from '../api/validation';
+import { DEFAULT_CATEGORY_SLUG } from '../categories/defaults';
 import { errorKind, logError } from '../util/logger';
 
 const MAX_VOICE_DURATION_SECONDS = 300;
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  tasks: '✅ Задачи',
-  ideas: '💡 Идеи',
-  shopping: '🛒 Покупки',
-  notes: '📝 Заметки',
-};
 
 export async function handleMessage(env: Env, msg: TelegramMessage): Promise<void> {
   if (!msg.from) return;
@@ -161,7 +154,7 @@ async function processTextNote(
   let items: NoteItem[];
   let usedFallback = guardUnavailable;
   try {
-    items = await parseNotes(env, text);
+    items = await parseNotes(env, userId, text);
     if (items.length === 0) {
       usedFallback = true;
       items = buildFallbackItems(text);
@@ -172,8 +165,11 @@ async function processTextNote(
     items = buildFallbackItems(text);
   }
 
-  const folders = await getFoldersByUserId(env, userId);
-  const folderMap = buildFolderMap(folders);
+  const [folders, categories] = await Promise.all([
+    getFoldersByUserId(env, userId),
+    getCategoriesByUserId(env, userId),
+  ]);
+  const folderMap = buildFolderMap(folders, categories);
 
   try {
     for (const item of items) {
@@ -190,7 +186,7 @@ async function processTextNote(
     return;
   }
 
-  let reply = formatResponse(items);
+  let reply = formatResponse(items, categories);
   if (usedFallback) {
     reply +=
       '\n\n⚠️ <i>Классификация временно недоступна — сохранил как обычную заметку.</i>';
@@ -211,36 +207,29 @@ async function processTextNote(
 function buildFallbackItems(text: string): NoteItem[] {
   return [{
     text,
-    type: 'notes',
-    category: 'notes',
+    type: DEFAULT_CATEGORY_SLUG,
+    category: DEFAULT_CATEGORY_SLUG,
     tags: extractTags(text),
   }];
 }
 
 function buildFolderMap(
-  folders: Array<{ id: number; name: string; category?: string | null }>
-): Partial<Record<NoteType, number>> {
-  const map: Partial<Record<NoteType, number>> = {};
+  folders: Array<{ id: number; name: string; category?: string | null }>,
+  categories: DbCategory[]
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  const knownSlugs = new Set(categories.map((category) => category.slug));
 
   for (const folder of folders) {
-    if (folder.category && isNoteType(folder.category)) {
+    if (folder.category && knownSlugs.has(folder.category) && map[folder.category] === undefined) {
       map[folder.category] = folder.id;
     }
-  }
-
-  for (const folder of folders) {
-    if (folder.category) continue;
-    const lower = folder.name.toLowerCase();
-    if (lower.includes('покупк') || lower.includes('shop')) map.shopping = folder.id;
-    else if (lower.includes('задач') || lower.includes('task')) map.tasks = folder.id;
-    else if (lower.includes('иде') || lower.includes('idea')) map.ideas = folder.id;
-    else if (!map.notes) map.notes = folder.id;
   }
 
   return map;
 }
 
-function formatResponse(items: NoteItem[]): string {
+function formatResponse(items: NoteItem[], categories: DbCategory[]): string {
   const grouped: Record<string, NoteItem[]> = {};
 
   for (const item of items) {
@@ -250,8 +239,13 @@ function formatResponse(items: NoteItem[]): string {
 
   const lines: string[] = ['🧠 <b>Разобрал:</b>\n'];
 
+  const categoryMap = new Map(categories.map((category) => [category.slug, category]));
+
   for (const [type, noteItems] of Object.entries(grouped)) {
-    const label = CATEGORY_EMOJI[type] ?? `📌 ${type}`;
+    const category = categoryMap.get(type);
+    const label = category
+      ? `${category.emoji} ${category.name}`
+      : `📌 ${type}`;
     lines.push(`<b>${label}:</b>`);
     for (const item of noteItems) {
       const display = item.text.length > 200 ? item.text.slice(0, 197) + '...' : item.text;

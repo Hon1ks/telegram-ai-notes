@@ -1,4 +1,4 @@
-import type { Note, Folder, FoldersResponse, NoteType } from '../types';
+import type { Note, Folder, FoldersResponse, NoteType, Category } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -104,4 +104,33 @@ export function reorderFolders(ids: number[]): Promise<Folder[]> {
 
 export function getTags(): Promise<string[]> {
   return request<string[]>('GET', '/api/tags');
+}
+
+// ─── Categories ──────────────────────────────────────────────────────────────
+
+export function getCategories(): Promise<Category[]> {
+  return request<Category[]>('GET', '/api/categories');
+}
+
+export function createCategory(data: {
+  slug: string;
+  name: string;
+  emoji?: string;
+  color?: string;
+  llm_hint?: string | null;
+}): Promise<Category> {
+  return request<Category>('POST', '/api/categories', data);
+}
+
+export function updateCategory(id: number, data: {
+  name?: string;
+  emoji?: string;
+  color?: string;
+  llm_hint?: string | null;
+}): Promise<Category> {
+  return request<Category>('PUT', `/api/categories/${id}`, data);
+}
+
+export function deleteCategory(id: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('DELETE', `/api/categories/${id}`);
 }

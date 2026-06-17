@@ -1,10 +1,10 @@
-import type { Env, TelegramMessage, TelegramCallbackQuery, NoteType } from '../types';
+import type { Env, TelegramMessage, TelegramCallbackQuery } from '../types';
 import { sendMessage, editMessageText, answerCallbackQuery } from './telegram';
 import { onboardingChoiceKeyboard, onboardingDoneKeyboard } from './keyboard';
 import { getOrCreateUser, updateUserState, createFolder, getFoldersByUserId } from '../db/queries';
 import { escapeHtml } from './html';
 
-const DEFAULT_FOLDERS: Array<{ name: string; category?: NoteType }> = [
+const DEFAULT_FOLDERS: Array<{ name: string; category?: string }> = [
   { name: '🚀 разработка', category: 'tasks' },
   { name: '🏠 дом' },
   { name: '🛒 покупки', category: 'shopping' },

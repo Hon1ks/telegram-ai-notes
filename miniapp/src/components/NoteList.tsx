@@ -6,13 +6,14 @@ interface Props {
   notes: Note[];
   loading: boolean;
   searchMode: boolean;
+  categoryMeta: Record<string, { label: string; emoji: string; color: string }>;
   onToggle: (id: number, done: number) => void;
   onDelete: (id: number) => void;
   onEdit: (id: number, text: string) => void;
   onTagClick?: (tag: string) => void;
 }
 
-export function NoteList({ notes, loading, searchMode, onToggle, onDelete, onEdit, onTagClick }: Props) {
+export function NoteList({ notes, loading, searchMode, categoryMeta, onToggle, onDelete, onEdit, onTagClick }: Props) {
   if (loading) {
     return (
       <div className={s.center}>
@@ -45,6 +46,7 @@ export function NoteList({ notes, loading, searchMode, onToggle, onDelete, onEdi
         <NoteCard
           key={note.id}
           note={note}
+          categoryMeta={categoryMeta}
           onToggle={onToggle}
           onDelete={onDelete}
           onEdit={onEdit}
