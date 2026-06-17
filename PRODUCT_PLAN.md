@@ -240,7 +240,7 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 - [x] Фаза 3b: CRUD /api/categories
 - [x] Фаза 3c: Динамический LLM prompt и parser
 - [x] Фаза 3d: CategoryManager, динамический UI
-- [ ] Фаза 4: Редактирование, пагинация, поиск+фильтры, undo, dark theme
+- [x] Фаза 4: Редактирование, пагинация, поиск+фильтры, undo, dark theme
 - [ ] Фаза 5: Undo бота, кнопки, STT confirm, inline actions
 - [ ] Фаза 6: Metrics, backup, staging, lint, автодеплой
 - [ ] Фаза 7: Напоминания, экспорт, корзина, smoke/e2e

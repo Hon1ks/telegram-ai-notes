@@ -7,7 +7,7 @@
   --hint:       var(--tg-theme-hint-color, #8e8e93);
   --accent:     var(--tg-theme-button-color, #007aff);
   --accent-fg:  var(--tg-theme-button-text-color, #ffffff);
-  --divider:    rgba(0,0,0,.08);
+  --divider:    color-mix(in srgb, var(--text) 10%, transparent);
 
   --c-tasks:    #3b82f6;
   --c-ideas:    #f59e0b;
@@ -29,6 +29,7 @@ html, body, #root {
   font-size: 15px; line-height: 1.5;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 button { cursor: pointer; border: none; background: none; font: inherit; color: inherit; }

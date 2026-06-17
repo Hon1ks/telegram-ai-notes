@@ -30,11 +30,15 @@ export function getNotes(params?: {
   type?: NoteType;
   folderId?: number;
   tag?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<Note[]> {
   const qs = new URLSearchParams();
   if (params?.type) qs.set('type', params.type);
   if (params?.folderId !== undefined) qs.set('folder_id', String(params.folderId));
   if (params?.tag) qs.set('tag', params.tag);
+  if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+  if (params?.offset !== undefined) qs.set('offset', String(params.offset));
   const q = qs.toString();
   return request<Note[]>('GET', `/api/notes${q ? '?' + q : ''}`);
 }
@@ -70,6 +74,7 @@ export function updateNote(id: number, data: {
   done?: number;
   folder_id?: number | null;
   tags?: string[];
+  type?: NoteType;
 }): Promise<Note> {
   return request<Note>('PUT', `/api/notes/${id}`, data);
 }
