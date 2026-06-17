@@ -4,7 +4,7 @@ import { handleNotesApi } from './api/notes';
 import { handleFoldersApi } from './api/folders';
 import { corsHeaders, errorResponse } from './api/auth';
 import { sendMessage } from './bot/telegram';
-import { claimUpdateId } from './db/queries';
+import { claimUpdateId, cleanupProcessedUpdates } from './db/queries';
 import { checkRateLimit, getClientIp } from './util/rateLimit';
 import { errorKind, logError, logInfo } from './util/logger';
 
@@ -12,9 +12,10 @@ const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
 const WEBHOOK_RATE_LIMIT = 60;
 const API_RATE_LIMIT = 120;
 const RATE_WINDOW_MS = 60_000;
+const PROCESSED_UPDATES_RETENTION_DAYS = 7;
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const requestId = crypto.randomUUID();
@@ -51,7 +52,7 @@ export default {
       }
 
       const ip = getClientIp(request);
-      if (!checkRateLimit(`webhook:${ip}`, WEBHOOK_RATE_LIMIT, RATE_WINDOW_MS)) {
+      if (!(await checkRateLimit(env, `webhook:${ip}`, WEBHOOK_RATE_LIMIT, RATE_WINDOW_MS))) {
         return new Response('Too Many Requests', { status: 429 });
       }
 
@@ -60,13 +61,13 @@ export default {
         return new Response('Payload Too Large', { status: 413 });
       }
 
-      return handleWebhook(request, env, requestId);
+      return handleWebhook(request, env, ctx, requestId);
     }
 
     // ── REST API ──
     if (path.startsWith('/api/')) {
       const ip = getClientIp(request);
-      if (!checkRateLimit(`api:${ip}`, API_RATE_LIMIT, RATE_WINDOW_MS)) {
+      if (!(await checkRateLimit(env, `api:${ip}`, API_RATE_LIMIT, RATE_WINDOW_MS))) {
         return errorResponse('Too many requests', 429, request, env, { 'X-Request-Id': requestId });
       }
 
@@ -96,9 +97,22 @@ export default {
       headers: { 'X-Request-Id': requestId },
     });
   },
+
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      cleanupProcessedUpdates(env, PROCESSED_UPDATES_RETENTION_DAYS).catch((err) => {
+        logError('cleanup_processed_updates_failed', { kind: errorKind(err) });
+      })
+    );
+  },
 };
 
-async function handleWebhook(request: Request, env: Env, requestId: string): Promise<Response> {
+async function handleWebhook(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  requestId: string
+): Promise<Response> {
   let update: TelegramUpdate;
 
   try {
@@ -111,13 +125,42 @@ async function handleWebhook(request: Request, env: Env, requestId: string): Pro
     return new Response('Bad Request', { status: 400 });
   }
 
+  let isNew = false;
   try {
-    const isNew = await claimUpdateId(env, update.update_id);
-    if (!isNew) {
-      logInfo('webhook_duplicate', { requestId, updateId: update.update_id });
-      return new Response('OK', { status: 200 });
-    }
+    isNew = await claimUpdateId(env, update.update_id);
+  } catch (err) {
+    logError('claim_update_id_failed', {
+      requestId,
+      updateId: update.update_id,
+      kind: errorKind(err),
+    });
+    return new Response('Internal Server Error', { status: 500 });
+  }
 
+  if (!isNew) {
+    logInfo('webhook_duplicate', { requestId, updateId: update.update_id });
+    return new Response('OK', { status: 200 });
+  }
+
+  ctx.waitUntil(
+    processWebhookUpdate(env, update, requestId).catch((err) => {
+      logError('webhook_background_failed', {
+        requestId,
+        updateId: update.update_id,
+        kind: errorKind(err),
+      });
+    })
+  );
+
+  return new Response('OK', { status: 200 });
+}
+
+async function processWebhookUpdate(
+  env: Env,
+  update: TelegramUpdate,
+  requestId: string
+): Promise<void> {
+  try {
     if (update.message) {
       await handleMessage(env, update.message);
     } else if (update.callback_query) {
@@ -143,6 +186,4 @@ async function handleWebhook(request: Request, env: Env, requestId: string): Pro
       }
     }
   }
-
-  return new Response('OK', { status: 200 });
 }

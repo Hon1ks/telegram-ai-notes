@@ -234,7 +234,7 @@ CRUD API, динамический LLM prompt, запрет удаления с�
 
 ## Чеклист задач
 
-- [ ] Фаза 1: Async webhook, LLM fallback, FTS batch, KV rate limit, cleanup
+- [x] Фаза 1: Async webhook, LLM fallback, FTS batch, KV rate limit (memory/KV), cleanup
 - [ ] Фаза 2: API/integration тесты + miniapp tests в CI
 - [ ] Фаза 3a: Таблица categories, миграция, seed
 - [ ] Фаза 3b: CRUD /api/categories

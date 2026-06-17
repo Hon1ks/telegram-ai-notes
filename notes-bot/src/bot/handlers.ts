@@ -3,7 +3,7 @@ import { sendMessage, sendChatAction, setChatMenuButton } from './telegram';
 import { handleStart, handleOnboardingCallback, handleOnboardingFolderInput } from './onboarding';
 import { cheapGuard, llmGuard } from '../pipeline/guard';
 import { transcribeVoice } from '../pipeline/stt';
-import { parseNotes } from '../pipeline/parser';
+import { parseNotes, extractTags } from '../pipeline/parser';
 import { getOrCreateUser, createNote, getFoldersByUserId } from '../db/queries';
 import { escapeHtml } from './html';
 import { isNoteType } from '../api/validation';
@@ -140,16 +140,13 @@ async function processTextNote(
   }
 
   let shouldProcess = true;
+  let guardUnavailable = false;
   try {
     shouldProcess = await llmGuard(env, text);
   } catch (err) {
     logError('llm_guard_failed', { kind: errorKind(err) });
-    await sendMessage(
-      env,
-      chatId,
-      '⚠️ Сервис классификации временно недоступен. Попробуй ещё раз через минуту.'
-    );
-    return;
+    guardUnavailable = true;
+    shouldProcess = true;
   }
 
   if (!shouldProcess) {
@@ -162,17 +159,17 @@ async function processTextNote(
   }
 
   let items: NoteItem[];
+  let usedFallback = guardUnavailable;
   try {
     items = await parseNotes(env, text);
+    if (items.length === 0) {
+      usedFallback = true;
+      items = buildFallbackItems(text);
+    }
   } catch (err) {
     logError('parse_notes_failed', { kind: errorKind(err) });
-    await sendMessage(env, chatId, '❌ Ошибка обработки. Попробуй ещё раз.');
-    return;
-  }
-
-  if (items.length === 0) {
-    await sendMessage(env, chatId, '🤔 Не удалось выделить заметки из сообщения.');
-    return;
+    usedFallback = true;
+    items = buildFallbackItems(text);
   }
 
   const folders = await getFoldersByUserId(env, userId);
@@ -193,7 +190,12 @@ async function processTextNote(
     return;
   }
 
-  const reply = formatResponse(items);
+  let reply = formatResponse(items);
+  if (usedFallback) {
+    reply +=
+      '\n\n⚠️ <i>Классификация временно недоступна — сохранил как обычную заметку.</i>';
+  }
+
   try {
     await sendMessage(env, chatId, reply);
   } catch (err) {
@@ -204,6 +206,15 @@ async function processTextNote(
       '✅ Заметка сохранена, но не удалось отправить подробный ответ.'
     );
   }
+}
+
+function buildFallbackItems(text: string): NoteItem[] {
+  return [{
+    text,
+    type: 'notes',
+    category: 'notes',
+    tags: extractTags(text),
+  }];
 }
 
 function buildFolderMap(

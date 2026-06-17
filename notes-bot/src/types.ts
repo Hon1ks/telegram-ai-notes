@@ -1,5 +1,6 @@
 export interface Env {
   NOTES_DB: D1Database;
+  RATE_LIMIT?: KVNamespace;
   TELEGRAM_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   OPENROUTER_API_KEY: string;

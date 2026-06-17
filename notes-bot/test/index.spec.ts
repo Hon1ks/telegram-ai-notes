@@ -5,7 +5,7 @@ import { validateInitData } from '../src/api/auth';
 import { escapeHtml } from '../src/bot/html';
 import { extractTags, parseLlmResponse, MAX_NOTE_ITEMS } from '../src/pipeline/parser';
 import { cheapGuard } from '../src/pipeline/guard';
-import { buildFtsQuery } from '../src/db/queries';
+import { buildFtsQuery, cleanupProcessedUpdates, createNote } from '../src/db/queries';
 import {
   isNoteType,
   parsePositiveInt,
@@ -71,6 +71,30 @@ describe('worker routing', () => {
     await waitOnExecutionContext(ctx);
 
     expect(response.status).toBe(401);
+  });
+
+  it('returns OK immediately for a new webhook update', async () => {
+    const request = new Request('http://example.com/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        update_id: 9_001_001,
+        message: {
+          message_id: 1,
+          from: { id: 42, is_bot: false, first_name: 'Test' },
+          chat: { id: 42, type: 'private' },
+          date: 1_800_000_000,
+          text: '/start',
+        },
+      }),
+    });
+    const ctx = createExecutionContext();
+
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('OK');
   });
 });
 
@@ -171,6 +195,48 @@ describe('text helpers', () => {
     }));
     const raw = JSON.stringify({ items });
     expect(parseLlmResponse(raw, 'fallback', [])).toHaveLength(MAX_NOTE_ITEMS);
+  });
+});
+
+describe('database helpers', () => {
+  it('creates a note and indexes it for FTS search', async () => {
+    const user = await env.NOTES_DB
+      .prepare('INSERT INTO users (telegram_id, state) VALUES (?, ?) RETURNING *')
+      .bind('fts-user-1', 'idle')
+      .first<{ id: number }>();
+
+    const note = await createNote(env, user!.id, 'notes', 'уникальный тест молоко', ['#дом']);
+    const results = await env.NOTES_DB
+      .prepare(`
+        SELECT n.id FROM notes n
+        JOIN notes_fts ON notes_fts.rowid = n.id
+        WHERE notes_fts MATCH ? AND n.user_id = ?
+      `)
+      .bind('"уникальный"* AND "тест"* AND "молоко"*', user!.id)
+      .all<{ id: number }>();
+
+    expect(note.text).toBe('уникальный тест молоко');
+    expect(results.results.some(row => row.id === note.id)).toBe(true);
+  });
+
+  it('removes old processed webhook update ids', async () => {
+    await env.NOTES_DB
+      .prepare('INSERT INTO processed_updates (update_id, processed_at) VALUES (?, datetime("now", "-30 days"))')
+      .bind(77_001)
+      .run();
+    await env.NOTES_DB
+      .prepare('INSERT INTO processed_updates (update_id, processed_at) VALUES (?, datetime("now"))')
+      .bind(77_002)
+      .run();
+
+    const removed = await cleanupProcessedUpdates(env, 7);
+    const remaining = await env.NOTES_DB
+      .prepare('SELECT update_id FROM processed_updates WHERE update_id IN (?, ?)')
+      .bind(77_001, 77_002)
+      .all<{ update_id: number }>();
+
+    expect(removed).toBeGreaterThanOrEqual(1);
+    expect(remaining.results.map(row => row.update_id)).toEqual([77_002]);
   });
 });
 

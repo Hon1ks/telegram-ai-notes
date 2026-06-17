@@ -162,20 +162,18 @@ export async function createNote(
   folderId?: number | null
 ): Promise<DbNote> {
   const tagsJson = JSON.stringify(tags);
+  const tagsForFts = tags.join(' ');
 
-  const result = await env.NOTES_DB
-    .prepare('INSERT INTO notes (user_id, folder_id, type, text, tags) VALUES (?, ?, ?, ?, ?)')
-    .bind(userId, folderId ?? null, type, text, tagsJson)
-    .run();
+  const [insertResult] = await env.NOTES_DB.batch([
+    env.NOTES_DB
+      .prepare('INSERT INTO notes (user_id, folder_id, type, text, tags) VALUES (?, ?, ?, ?, ?)')
+      .bind(userId, folderId ?? null, type, text, tagsJson),
+    env.NOTES_DB
+      .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (last_insert_rowid(), ?, ?)')
+      .bind(text, tagsForFts),
+  ]);
 
-  const noteId = result.meta.last_row_id;
-
-  // Update FTS index
-  await env.NOTES_DB
-    .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
-    .bind(noteId, text, tags.join(' '))
-    .run();
-
+  const noteId = insertResult.meta.last_row_id;
   const note = await env.NOTES_DB
     .prepare('SELECT * FROM notes WHERE id = ?')
     .bind(noteId)
@@ -300,27 +298,51 @@ export async function updateNote(
 
   if (sets.length === 0) return;
 
+  const needsFtsUpdate = fields.text !== undefined || fields.tags !== undefined;
+
+  if (needsFtsUpdate) {
+    const note = await getNoteById(env, noteId, userId);
+    if (!note) return;
+
+    const nextText = fields.text ?? note.text;
+    const nextTags = fields.tags ?? (JSON.parse(note.tags || '[]') as string[]);
+    const nextTagsForFts = nextTags.join(' ');
+
+    params.push(noteId, userId);
+    await env.NOTES_DB.batch([
+      env.NOTES_DB
+        .prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`)
+        .bind(...params),
+      env.NOTES_DB
+        .prepare('DELETE FROM notes_fts WHERE rowid = ?')
+        .bind(noteId),
+      env.NOTES_DB
+        .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
+        .bind(noteId, nextText, nextTagsForFts),
+    ]);
+    return;
+  }
+
   params.push(noteId, userId);
   await env.NOTES_DB
     .prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`)
     .bind(...params)
     .run();
+}
 
-  // Update FTS if text or tags changed
-  if (fields.text !== undefined || fields.tags !== undefined) {
-    const note = await getNoteById(env, noteId, userId);
-    if (note) {
-      await env.NOTES_DB
-        .prepare('DELETE FROM notes_fts WHERE rowid = ?')
-        .bind(noteId)
-        .run();
-      const tags = JSON.parse(note.tags || '[]') as string[];
-      await env.NOTES_DB
-        .prepare('INSERT INTO notes_fts(rowid, text, tags) VALUES (?, ?, ?)')
-        .bind(noteId, note.text, tags.join(' '))
-        .run();
-    }
-  }
+export async function cleanupProcessedUpdates(
+  env: Env,
+  retentionDays = 7
+): Promise<number> {
+  const result = await env.NOTES_DB
+    .prepare(
+      `DELETE FROM processed_updates
+       WHERE processed_at < datetime('now', ?)`
+    )
+    .bind(`-${retentionDays} days`)
+    .run();
+
+  return result.meta.changes ?? 0;
 }
 
 export async function deleteNote(env: Env, noteId: number, userId: number): Promise<void> {
