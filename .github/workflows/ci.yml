@@ -21,6 +21,7 @@ jobs:
           cache-dependency-path: notes-bot/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm run lint
       - run: npm test -- --run
 
   miniapp:

@@ -7,7 +7,8 @@ import { corsHeaders, errorResponse } from './api/auth';
 import { sendMessage } from './bot/telegram';
 import { claimUpdateId, cleanupProcessedUpdates } from './db/queries';
 import { checkRateLimit, getClientIp } from './util/rateLimit';
-import { errorKind, logError, logInfo } from './util/logger';
+import { errorKind, logError, logInfo, logService, timed } from './util/logger';
+import { backupD1ToR2 } from './ops/backup';
 
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
 const WEBHOOK_RATE_LIMIT = 60;
@@ -73,23 +74,26 @@ export default {
       }
 
       try {
+        const apiFields = { requestId, path, method: request.method };
+
         if (path === '/api/tags' || path === '/api/notes' || path.startsWith('/api/notes/')) {
-          return await handleNotesApi(env, request, path, requestId);
+          return await timed('api', 'notes_api', () => handleNotesApi(env, request, path, requestId), apiFields);
         }
 
         if (path === '/api/folders' || path.startsWith('/api/folders/')) {
-          return await handleFoldersApi(env, request, path, requestId);
+          return await timed('api', 'folders_api', () => handleFoldersApi(env, request, path, requestId), apiFields);
         }
 
         if (path === '/api/categories' || path.startsWith('/api/categories/')) {
-          return await handleCategoriesApi(env, request, path, requestId);
+          return await timed('api', 'categories_api', () => handleCategoriesApi(env, request, path, requestId), apiFields);
         }
 
         return errorResponse('Not found', 404, request, env, { 'X-Request-Id': requestId });
       } catch (err) {
-        logError('api_handler_failed', {
+        logService('error', 'api', 'api_handler_failed', {
           requestId,
           path,
+          outcome: 'error',
           kind: errorKind(err),
         });
         return errorResponse('Internal server error', 500, request, env, { 'X-Request-Id': requestId });
@@ -105,8 +109,16 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
-      cleanupProcessedUpdates(env, PROCESSED_UPDATES_RETENTION_DAYS).catch((err) => {
-        logError('cleanup_processed_updates_failed', { kind: errorKind(err) });
+      timed('cron', 'scheduled_cleanup', () =>
+        cleanupProcessedUpdates(env, PROCESSED_UPDATES_RETENTION_DAYS)
+      ).catch((err) => {
+        logService('error', 'cron', 'cleanup_failed', { outcome: 'error', kind: errorKind(err) });
+      })
+    );
+
+    ctx.waitUntil(
+      backupD1ToR2(env).catch((err) => {
+        logService('error', 'backup', 'scheduled_backup_failed', { outcome: 'error', kind: errorKind(err) });
       })
     );
   },
@@ -148,10 +160,14 @@ async function handleWebhook(
   }
 
   ctx.waitUntil(
-    processWebhookUpdate(env, update, requestId).catch((err) => {
-      logError('webhook_background_failed', {
+    timed('webhook', 'webhook_process', () =>
+      processWebhookUpdate(env, update, requestId),
+      { requestId, updateId: update.update_id }
+    ).catch((err) => {
+      logService('error', 'webhook', 'webhook_background_failed', {
         requestId,
         updateId: update.update_id,
+        outcome: 'error',
         kind: errorKind(err),
       });
     })

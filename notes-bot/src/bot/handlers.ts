@@ -2,6 +2,7 @@ import type { Env, TelegramMessage, TelegramCallbackQuery } from '../types';
 import { sendMessage, sendChatAction, setChatMenuButton } from './telegram';
 import { handleStart, handleOnboardingCallback, handleOnboardingFolderInput } from './onboarding';
 import { transcribeVoice } from '../pipeline/stt';
+import { UsageCapExceeded } from '../util/usageCap';
 import { getOrCreateUser, getFoldersByUserId } from '../db/queries';
 import { escapeHtml } from './html';
 import { sttConfirmKeyboard } from './keyboard';
@@ -82,8 +83,16 @@ export async function handleMessage(env: Env, msg: TelegramMessage): Promise<voi
 
     let text: string;
     try {
-      text = await transcribeVoice(env, msg.voice.file_id);
+      text = await transcribeVoice(env, msg.voice.file_id, user.id);
     } catch (err) {
+      if (err instanceof UsageCapExceeded) {
+        await sendMessage(
+          env,
+          chatId,
+          '❌ Дневной лимит голосовых заметок (20) исчерпан. Попробуй завтра или напиши текстом.'
+        );
+        return;
+      }
       logError('stt_failed', { kind: errorKind(err) });
       await sendMessage(env, chatId, '❌ Не удалось распознать голосовое сообщение. Попробуй ещё раз.');
       return;

@@ -1,6 +1,7 @@
 import type { Env, NoteItem, DbCategory } from '../types';
 import { sendMessage } from './telegram';
 import { cheapGuard, llmGuard } from '../pipeline/guard';
+import { UsageCapExceeded } from '../util/usageCap';
 import { parseNotes, extractTags } from '../pipeline/parser';
 import {
   createNote,
@@ -35,12 +36,18 @@ export async function processTextNote(
 
   let shouldProcess = true;
   let guardUnavailable = false;
+  let capExceeded = false;
   try {
-    shouldProcess = await llmGuard(env, text);
+    shouldProcess = await llmGuard(env, text, userId);
   } catch (err) {
-    logError('llm_guard_failed', { kind: errorKind(err) });
-    guardUnavailable = true;
-    shouldProcess = true;
+    if (err instanceof UsageCapExceeded) {
+      capExceeded = true;
+      shouldProcess = true;
+    } else {
+      logError('llm_guard_failed', { kind: errorKind(err) });
+      guardUnavailable = true;
+      shouldProcess = true;
+    }
   }
 
   if (!shouldProcess) {
@@ -53,7 +60,7 @@ export async function processTextNote(
   }
 
   let items: NoteItem[];
-  let usedFallback = guardUnavailable;
+  let usedFallback = guardUnavailable || capExceeded;
   try {
     items = await parseNotes(env, userId, text);
     if (items.length === 0) {
@@ -61,9 +68,15 @@ export async function processTextNote(
       items = buildFallbackItems(text);
     }
   } catch (err) {
-    logError('parse_notes_failed', { kind: errorKind(err) });
-    usedFallback = true;
-    items = buildFallbackItems(text);
+    if (err instanceof UsageCapExceeded) {
+      capExceeded = true;
+      usedFallback = true;
+      items = buildFallbackItems(text);
+    } else {
+      logError('parse_notes_failed', { kind: errorKind(err) });
+      usedFallback = true;
+      items = buildFallbackItems(text);
+    }
   }
 
   const [folders, categories] = await Promise.all([
@@ -90,7 +103,9 @@ export async function processTextNote(
   }
 
   let reply = formatResponse(items, categories);
-  if (usedFallback) {
+  if (capExceeded) {
+    reply += '\n\n⚠️ <i>Дневной лимит AI-обработки исчерпан — сохранил как обычную заметку.</i>';
+  } else if (usedFallback) {
     reply +=
       '\n\n⚠️ <i>Классификация временно недоступна — сохранил как обычную заметку.</i>';
   }

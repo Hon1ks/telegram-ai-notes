@@ -3,7 +3,7 @@
 > Этот файл сохраняет ключевые решения и историю обсуждения, чтобы при новом чате (после перезагрузки ПК) агент мог быстро войти в контекст.  
 > **Обновляй этот файл** после каждой значимой сессии работы над проектом.
 
-**Последнее обновление:** 17 июня 2026 (Фаза 5 выполнена)
+**Последнее обновление:** 17 июня 2026 (Фаза 6 выполнена)
 
 ---
 
@@ -77,7 +77,7 @@
 
 ## Текущие открытые задачи
 
-См. чеклист в [PRODUCT_PLAN.md](./PRODUCT_PLAN.md). Следующий логичный шаг — **Фаза 6** (ops/CI: metrics, backup, staging, lint, автодеплой).
+См. чеклист в [PRODUCT_PLAN.md](./PRODUCT_PLAN.md). Следующий логичный шаг — **Фаза 7** (напоминания, экспорт, корзина, smoke/e2e).
 
 **Перед production-деплоем:** применить миграции `0002_fts_backfill.sql` и `0003_categories.sql` на remote D1.
 
@@ -177,6 +177,20 @@
 - 48/48 тестов (STT confirm + undo integration)
 
 **Следующий шаг:** Фаза 6 — эксплуатация и CI/CD
+
+### 17.06.2026 — Фаза 6: эксплуатация и CI/CD
+
+**Сделано:**
+- Structured logs: `logService`, `timed()` с `service`/`outcome`/`duration_ms`
+- D1 backup → R2 (`ops/backup.ts`), cron вместе с cleanup; `RESTORE.md`
+- Staging env в `wrangler.jsonc`, `migrations_dir`
+- ESLint + `npm run lint` в CI; deploy workflow на `main`
+- Per-user daily cap: LLM 50, STT 20 (`usageCap.ts`)
+- 51/51 тестов
+
+**Ручные шаги в Cloudflare:** создать R2 `notes-bot-backups`, staging D1, secrets для deploy
+
+**Следующий шаг:** Фаза 7 — напоминания, экспорт, корзина
 
 ### [Дата] — [Тема сессии]
 

@@ -16,11 +16,11 @@ export async function parseNotes(env: Env, userId: number, text: string): Promis
   const extractedTags = extractTags(text);
 
   try {
-    const raw = await processNotes(env, text, categories);
+    const raw = await processNotes(env, text, categories, userId);
     return parseLlmResponse(raw, text, extractedTags, allowedSlugs);
   } catch {
     try {
-      const raw2 = await retryProcessNotes(env, text, categories);
+      const raw2 = await retryProcessNotes(env, text, categories, userId);
       return parseLlmResponse(raw2, text, extractedTags, allowedSlugs);
     } catch {
       return fallback(text, extractedTags);

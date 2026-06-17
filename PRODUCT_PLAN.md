@@ -9,7 +9,7 @@
 
 ---
 
-## Прогресс (5 из 7 фаз)
+## Прогресс (6 из 7 фаз)
 
 | Фаза | Статус | Коммит | Тесты |
 |------|--------|--------|-------|
@@ -18,12 +18,13 @@
 | 3. Кастомные категории | ✅ Готово | `f3e119c` | +7 API tests |
 | 4. Mini App UX | ✅ Готово | `bf6ab14` | build OK |
 | 5. UX Telegram-бота | ✅ Готово | `94823d7` | 48/48 |
-| 6. Ops / CI/CD | ⬜ Осталось | — | — |
+| 6. Ops / CI/CD | ✅ Готово | `TBD` | 51/51 |
 | 7. Напоминания / экспорт / корзина | ⬜ Осталось | — | — |
 
-**CI:** зелёный (после `724f9e4` — `package-lock.json` в репо)  
+**CI:** зелёный + ESLint в pipeline  
 **Production D1:** миграции `0002`, `0003` применены  
-**Следующий шаг:** Фаза 6
+**Deploy:** `.github/workflows/deploy.yml` (push → `main`, нужны secrets)  
+**Следующий шаг:** Фаза 7
 
 ---
 
@@ -44,12 +45,11 @@
 - Бот: STT confirm, кнопки после сохранения, undo, inline перемещение
 - CI на GitHub Actions (notes-bot + miniapp build)
 
-**Осталось (фазы 6–7):**
-- Structured logs, D1 backup → R2, staging, ESLint, автодеплой
-- Per-user daily cap на LLM/STT
+**Осталось (фаза 7):**
 - Напоминания, экспорт JSON/MD, корзина (soft delete)
 - Финальный smoke/e2e из `SMOKE_TEST.md`
 - Vitest для miniapp (отложен с Фазы 2)
+- Создать staging D1 + R2 bucket в Cloudflare (инструкции в `wrangler.jsonc`, `RESTORE.md`)
 
 ```mermaid
 flowchart LR
@@ -185,14 +185,15 @@ CREATE TABLE categories (
 
 ---
 
-## Фаза 6. Эксплуатация и CI/CD ⬜ (P1)
+## Фаза 6. Эксплуатация и CI/CD ✅ (P1)
 
-- [ ] Structured logs: `duration_ms`, `service`, `outcome`
-- [ ] D1 backup → R2 (cron), `RESTORE.md`
-- [ ] Staging env + отдельная D1 в `wrangler.jsonc`
-- [ ] ESLint, автодеплой, `wrangler d1 migrations`
-- [ ] Per-user daily cap на LLM/STT
-- [x] CI GitHub Actions: `tsc` + tests + miniapp build
+- [x] Structured logs: `service`, `outcome`, `duration_ms` (`util/logger.ts`, `timed()`)
+- [x] D1 backup → R2 (cron 03:00 UTC), `RESTORE.md`, `ops/backup.ts`
+- [x] Staging env в `wrangler.jsonc` (`--env staging`, отдельная D1 — создать вручную)
+- [x] ESLint (`npm run lint`), автодеплой `.github/workflows/deploy.yml`
+- [x] `migrations_dir` в `wrangler.jsonc`
+- [x] Per-user daily cap: LLM 50/день, STT 20/день (`util/usageCap.ts`)
+- [x] CI GitHub Actions: `tsc` + lint + tests + miniapp build
 - [x] `package-lock.json` в репо (fix CI cache)
 
 ---
@@ -224,8 +225,8 @@ CREATE TABLE categories (
 ✅ Фаза 3 (кастомные категории)  — готово
 ✅ Фаза 4 (Mini App UX)          — готово
 ✅ Фаза 5 (бот UX)               — готово
-⬜ Фаза 6 (ops/CI)               — следующая
-⬜ Фаза 7 (напоминания/экспорт)  — после 6
+✅ Фаза 6 (ops/CI)               — готово
+⬜ Фаза 7 (напоминания/экспорт)  — следующая
 ⬜ Финальный smoke из SMOKE_TEST.md
 ```
 
@@ -240,7 +241,8 @@ CREATE TABLE categories (
 - [x] API + категории покрыты тестами (48); CI зелёный
 - [x] Mini App: полное управление заметками и категориями
 - [x] Бот: STT confirm, undo, inline move, кнопки после сохранения
-- [ ] Бэкап D1, staging, structured logs, мониторинг
+- [x] Бэкап D1 (R2 cron), staging config, structured logs
+- [ ] R2 bucket + staging D1 созданы в Cloudflare (ручной шаг)
 - [ ] Напоминания, экспорт, корзина
 - [ ] SMOKE_TEST.md пройден end-to-end
 
@@ -258,5 +260,5 @@ CREATE TABLE categories (
 | 3d | CategoryManager, динамический UI | ✅ |
 | 4 | Mini App: редактирование, пагинация, поиск, undo, dark theme | ✅ |
 | 5 | Бот: undo, кнопки, STT confirm, inline move | ✅ |
-| 6 | Metrics, backup, staging, lint, автодеплой | ⬜ |
+| 6 | Metrics, backup, staging, lint, автодеплой | ✅ |
 | 7 | Напоминания, экспорт, корзина, smoke/e2e | ⬜ |

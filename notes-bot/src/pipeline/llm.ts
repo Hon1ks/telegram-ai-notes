@@ -1,4 +1,6 @@
 import type { Env, DbCategory } from '../types';
+import { consumeUsage, UsageCapExceeded } from '../util/usageCap';
+import { timed } from '../util/logger';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'stepfun/step-3.5-flash:free';
@@ -34,7 +36,12 @@ async function fetchWithTimeout(
   }
 }
 
-export async function callLLM(env: Env, prompt: string): Promise<string> {
+export async function callLLM(env: Env, prompt: string, userId?: number): Promise<string> {
+  if (userId !== undefined && !(await consumeUsage(env, userId, 'llm'))) {
+    throw new UsageCapExceeded('llm');
+  }
+
+  return timed('llm', 'llm_call', async () => {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -83,6 +90,7 @@ export async function callLLM(env: Env, prompt: string): Promise<string> {
   }
 
   throw lastError instanceof Error ? lastError : new Error('LLM request failed');
+  }, userId !== undefined ? { userId } : {});
 }
 
 function extractJson(raw: string): string {
@@ -108,10 +116,10 @@ function buildAllowedSlugs(categories: DbCategory[]): string {
 export async function processNotes(
   env: Env,
   text: string,
-  categories: DbCategory[]
+  categories: DbCategory[],
+  userId?: number
 ): Promise<string> {
   const categorySection = buildCategoryPromptSection(categories);
-  const allowedSlugs = buildAllowedSlugs(categories);
 
   const prompt = `Ты — ассистент для обработки заметок. Раздели текст на отдельные смысловые части и классифицируй каждую.
 
@@ -125,13 +133,14 @@ ${categorySection}
 
 Текст: ${text}`;
 
-  return callLLM(env, prompt);
+  return callLLM(env, prompt, userId);
 }
 
 export async function retryProcessNotes(
   env: Env,
   text: string,
-  categories: DbCategory[]
+  categories: DbCategory[],
+  userId?: number
 ): Promise<string> {
   const allowedSlugs = buildAllowedSlugs(categories);
 
@@ -144,5 +153,5 @@ export async function retryProcessNotes(
 
 Текст: ${text}`;
 
-  return callLLM(env, prompt);
+  return callLLM(env, prompt, userId);
 }

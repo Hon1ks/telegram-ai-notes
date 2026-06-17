@@ -12,17 +12,41 @@
     {
       "binding": "NOTES_DB",
       "database_name": "notes-bot-db",
-      "database_id": "0c8832d8-30e2-4101-bc7a-820e8b9d6e93"
+      "database_id": "0c8832d8-30e2-4101-bc7a-820e8b9d6e93",
+      "migrations_dir": "migrations"
     }
   ],
   "triggers": {
     "crons": ["0 3 * * *"]
-  }
-  // Глобальный rate limit (опционально):
+  },
+  // Опционально — rate limit + usage caps + STT session:
   //   npx wrangler kv namespace create RATE_LIMIT
-  //   добавить в kv_namespaces: { "binding": "RATE_LIMIT", "id": "<id>" }
-  // Секреты добавлять через:
+  //   kv_namespaces: [{ "binding": "RATE_LIMIT", "id": "<id>" }]
+  //
+  // Опционально — nightly D1 backup:
+  //   npx wrangler r2 bucket create notes-bot-backups
+  //   r2_buckets: [{ "binding": "BACKUP_BUCKET", "bucket_name": "notes-bot-backups" }]
+  //
+  // Секреты:
   //   npx wrangler secret put TELEGRAM_TOKEN
   //   npx wrangler secret put OPENROUTER_API_KEY
   //   npx wrangler secret put STT_API_KEY
+  //
+  // Staging (создай отдельную D1 и подставь database_id):
+  "env": {
+    "staging": {
+      "name": "notes-bot-staging",
+      "d1_databases": [
+        {
+          "binding": "NOTES_DB",
+          "database_name": "notes-bot-db-staging",
+          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "triggers": {
+        "crons": ["0 4 * * *"]
+      }
+    }
+  }
 }
